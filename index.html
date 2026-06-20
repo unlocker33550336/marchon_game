@@ -24,6 +24,7 @@
 
         .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; }
         .connect-btn { background: #54a0ff; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        .ai-btn { background: #10ac84; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
         .game-area { display: none; position: relative; }
@@ -78,8 +79,9 @@
     </div>
 
     <div class="connection-panel" id="connection-panel">
-        <h2>オンライン対戦サーバーへの接続</h2>
-        <button class="connect-btn" onclick="connectToServer()">🌐 サーバーに接続して参戦</button>
+        <h2>対戦モードの選択</h2>
+        <button class="connect-btn" onclick="connectToServer()">🌐 オンライン対戦（2人）</button>
+        <button class="ai-btn" onclick="startAIMode()">🤖 練習相手（AI対戦）</button>
     </div>
 
     <div class="waiting-screen" id="waiting-screen">
@@ -118,7 +120,7 @@
             <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、毎ターン5分以内にカードをボックスに設置してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
             <p>カードは全部で4種類あり、それぞれ水カード、石カード、太陽カード、応援カードです。水カードはプレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。石カードはプレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落します。太陽カードはプレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。応援カードはプレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</p>
             <p>初期の気温は5℃です。</p>
-            <p><strong>&lt;イベント&gt;</strong><br>各プレイヤーは開始から15ターン経過するとイベントを実行する権利が与えられます。イベントを実行したプレイヤーは、実行したターンから10ターン後にイベントを実行する権利が再び与えられます。</p>
+            <p><strong>&lt;イベント&gt;</strong><br>各プレイヤーは開始から15ターン経過するとイベントを実行する権利が与えられます。イベントを実行したプレイヤーは、実行したターンから10ターン後にイベントを実行する権利が再びアドバイスされます。</p>
         </div>
         <div id="content-chat" style="display:none;">
             <div class="chat-logs" id="chat-logs">【システム】チャットへようこそ。</div>
@@ -132,21 +134,30 @@
 
 <script>
     let socket = null;
-    let myPlayerNumber = null; 
+    let myPlayerNumber = 1; 
+    let isAIMode = false;
     let timerInterval = null;
     let timerSeconds = 300;
     let localKeep = [];
     let isLocked = false;
 
+    // AIモード用の内部ローカルステート
+    let aiState = {
+        turn: 1,
+        p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [] },
+        p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [] },
+        aiKeep: []
+    };
+
     window.onload = () => {
         const savedRole = localStorage.getItem('marathon_role');
         if (savedRole) {
             myPlayerNumber = parseInt(savedRole);
-            connectToServer();
         }
     };
 
     function connectToServer() {
+        isAIMode = false;
         try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
 
         document.getElementById('connection-panel').style.display = 'none';
@@ -180,7 +191,6 @@
             logs.scrollTop = logs.scrollHeight;
         });
 
-        // 🌟 タイムオーバーによる失格処理を受信したとき
         socket.on('game_over_timeout', (data) => {
             clearInterval(timerInterval);
             lockScreen();
@@ -190,12 +200,9 @@
 
         socket.on('round_result', (data) => {
             document.getElementById('turn-count').innerText = data.nextTurn;
-
-            // ランナー位置更新
             document.getElementById('runner-p1').style.left = Math.min(data.p1Progress, 85) + "%";
             document.getElementById('runner-p2').style.left = Math.min(data.p2Progress, 85) + "%";
 
-            // 🌟【新演出】各レーン個別の温度段階カラー（案B）を適用！
             updateLaneColor('lane-p1', data.p1Temp);
             updateLaneColor('lane-p2', data.p2Temp);
 
@@ -207,21 +214,32 @@
         });
     }
 
-    // 温度に応じた路面色の塗り替え関数
+    // 🤖 AI対戦モードを開始する
+    function startAIMode() {
+        isAIMode = true;
+        myPlayerNumber = 1; // プレイヤーは常にP1
+        document.getElementById('connection-panel').style.display = 'none';
+        document.getElementById('game-area').style.display = 'block';
+        document.getElementById('tab-chat-btn').style.display = 'none'; // チャットは非表示
+
+        unlockScreen();
+        setupHandAndBoxes();
+        startTimer(300);
+    }
+
     function updateLaneColor(laneId, temp) {
         const laneEl = document.getElementById(laneId);
         if(!laneEl) return;
         
         if (temp < 5) {
-            laneEl.style.backgroundColor = "#4a69bd"; // 5℃未満：水色
+            laneEl.style.backgroundColor = "#4a69bd";
         } else if (temp === 5) {
-            laneEl.style.backgroundColor = "#2e2e2e"; // 5℃ちょうど：グレー
+            laneEl.style.backgroundColor = "#2e2e2e";
         } else if (temp >= 6 && temp <= 9) {
-            laneEl.style.backgroundColor = "#f1c40f"; // 6℃〜9℃：黄色
+            laneEl.style.backgroundColor = "#f1c40f";
         } else if (temp >= 10 && temp <= 14) {
-            laneEl.style.backgroundColor = "#e67e22"; // 10℃〜14℃：オレンジ
+            laneEl.style.backgroundColor = "#e67e22";
         } else if (temp >= 15) {
-            // 15℃以上は温度が上がるほど段階的に濃い赤へ
             let depth = Math.min(150, 70 + (temp - 15) * 15);
             laneEl.style.backgroundColor = `rgb(${depth}, 15, 15)`;
         }
@@ -242,17 +260,15 @@
     }
 
     function notifyCardMove(parentElementId) {
-        if(isLocked) return;
+        if(isLocked || isAIMode) return;
         if(socket && parentElementId) {
             let zoneName = parentElementId.replace('zone-', '').replace('box-', '');
             socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName });
         }
     }
 
-    // 🌟【バグ修正】保留ボックスにカードがすでに1枚あるかチェックする関数
     function canAddToKeep(cardId) {
         const keepZone = document.getElementById('zone-keep');
-        // 移動させようとしているカード自身がすでに保留に入っているなら移動させてOK
         const isAlreadyInKeep = document.getElementById(cardId)?.parentElement === keepZone;
         if (keepZone.children.length >= 1 && !isAlreadyInKeep) {
             alert("保留ボックスには1枚しかカードを置けません！");
@@ -270,7 +286,7 @@
         keepZone.innerHTML = '';
         handZone.innerHTML = '';
 
-        document.getElementById('hand-title').innerText = `プレイヤー ${myPlayerNumber} の手札`;
+        document.getElementById('hand-title').innerText = isAIMode ? "あなたの手札 (AI対戦中)" : `プレイヤー ${myPlayerNumber} の手札`;
 
         const types = ['sun', 'stone', 'water', 'cheer'];
         const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
@@ -301,9 +317,7 @@
                 let currentIdx = zones.indexOf(card.parentElement.id);
                 let nextIdx = (currentIdx + 1) % zones.length;
                 
-                // 次が保留ゾーンなら1枚制限をチェック
                 if (zones[nextIdx] === 'zone-keep' && !canAddToKeep(card.id)) {
-                    // 保留がいっぱいなら保留をスキップして手札に戻す
                     nextIdx = 0; 
                 }
                 
@@ -321,9 +335,8 @@
             if(isLocked) return;
             const id = e.dataTransfer.getData('text/plain');
             
-            // 🌟 ドロップ先が保留ゾーンなら1枚制限をチェック
             if ((zone.id === 'zone-keep' || zone.parentElement.id === 'box-keep') && !canAddToKeep(id)) {
-                return; // 弾く
+                return;
             }
             
             const dragged = document.getElementById(id);
@@ -342,10 +355,15 @@
             timerSeconds--;
             updateTimerDisplay();
             
-            // 🌟【新機能】5分（0秒）になったら遅延行為としてサーバーに即通知
             if (timerSeconds <= 0) {
                 clearInterval(timerInterval);
-                socket.emit('player_timeout', { player: myPlayerNumber });
+                if (isAIMode) {
+                    lockScreen();
+                    document.getElementById('submit-btn').innerText = "ゲーム終了（時間切れ失格）";
+                    alert("【ゲーム終了】5分以上経過したため、遅延行為で失格（ゲームオーバー）となりました！");
+                } else {
+                    socket.emit('player_timeout', { player: myPlayerNumber });
+                }
             }
         }, 1000);
     }
@@ -375,14 +393,123 @@
         }
 
         lockScreen();
-        document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
-        socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
+
+        if (isAIMode) {
+            // 🤖 AIモード用の即時ローカル計算
+            setTimeout(() => {
+                executeAILogic(choice);
+            }, 800);
+        } else {
+            // 🌐 オンラインモード用のサーバー送信
+            document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
+            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
+        }
+    }
+
+    // 🤖 AI側の行動をランダムシミュレートしてローカルで結果を出す
+    function executeAILogic(playerChoice) {
+        const pool = ['sun', 'stone', 'water', 'cheer'].filter(c => !aiState.aiKeep.includes(c));
+        
+        let aiChoice = { self: [], target: [], waste: [], keep: [] };
+        
+        // 前回の保留分を戻す
+        let available = [...pool, ...aiState.aiKeep];
+        aiState.aiKeep = [];
+
+        // AIは1枚をランダムに25%の確率で保留し、残りを適当に割り振る
+        if (Math.random() < 0.25) {
+            let keepCard = available.pop();
+            aiChoice.keep.push(keepCard);
+            aiState.aiKeep.push(keepCard);
+        }
+
+        while(available.length > 0) {
+            let c = available.pop();
+            let rand = Math.random();
+            if(rand < 0.35) aiChoice.self.push(c);
+            else if(rand < 0.7) aiChoice.target.push(c);
+            else aiChoice.waste.push(c);
+        }
+
+        // P1(自分)とP2(AI)の計算を実行 (server.jsと同じロジックをフロントで再現)
+        let state = aiState;
+        let c1 = playerChoice;
+        let c2 = aiChoice;
+
+        let p1Sun = c1.self.includes('sun') || c2.target.includes('sun');
+        let p2Sun = c2.self.includes('sun') || c1.target.includes('sun');
+        if (p1Sun) state.p1.temp++;
+        if (p2Sun) state.p2.temp++;
+
+        if (c1.self.includes('cheer')) state.p1.cheerCount++;
+        if (c2.target.includes('cheer')) state.p1.cheerCount++;
+        if (c2.self.includes('cheer')) state.p2.cheerCount++;
+        if (c1.target.includes('cheer')) state.p2.cheerCount++;
+
+        let p1Stone = (c1.self.includes('stone') ? 1 : 0) + (c2.target.includes('stone') ? 1 : 0);
+        let p2Stone = (c2.self.includes('stone') ? 1 : 0) + (c1.target.includes('stone') ? 1 : 0);
+        state.p1.stoneCount += p1Stone; state.p2.stoneCount += p2Stone;
+        state.p1.consecutiveStone = p1Stone > 0 ? state.p1.consecutiveStone + 1 : 0;
+        state.p2.consecutiveStone = p2Stone > 0 ? state.p2.consecutiveStone + 1 : 0;
+
+        let p1Water = (c1.self.includes('water') ? 1 : 0) + (c2.target.includes('water') ? 1 : 0);
+        let p2Water = (c2.self.includes('water') ? 1 : 0) + (c1.target.includes('water') ? 1 : 0);
+        state.p1.waterHistory.push(p1Water); if(state.p1.waterHistory.length > 4) state.p1.waterHistory.shift();
+        state.p2.waterHistory.push(p2Water); if(state.p2.waterHistory.length > 4) state.p2.waterHistory.shift();
+        state.p1.noWaterCount = p1Water === 0 ? state.p1.noWaterCount + 1 : 0;
+        state.p2.noWaterCount = p2Water === 0 ? state.p2.noWaterCount + 1 : 0;
+
+        // スピード算出 (P1)
+        let p1Spd = 5;
+        if (state.p1.temp >= 6 && state.p1.temp <= 10) p1Spd = 7;
+        else if (state.p1.temp >= 10 && state.p1.temp <= 15) p1Spd = 10;
+        else if (state.p1.temp >= 15 && state.p1.temp <= 20) p1Spd = Math.max(5, 10 - (state.p1.temp - 15));
+        else if (state.p1.temp >= 20) p1Spd = Math.max(0, 5 - (state.p1.temp - 20));
+        if (c1.self.includes('cheer')) p1Spd += 1;
+        if (c2.target.includes('cheer')) p1Spd += 1;
+        if (state.p1.cheerCount > 0 && state.p1.cheerCount % 10 === 0) p1Spd += (state.p1.cheerCount * 0.5);
+        if (p1Stone > 0) p1Spd -= (state.p1.consecutiveStone > 1) ? (1 + (state.p1.consecutiveStone * 0.25)) : 1;
+        if (state.p1.stoneCount > 0 && state.p1.stoneCount % 10 === 0) p1Spd -= (state.p1.stoneCount * 0.5);
+        if (state.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (state.p1.progress >= 80) ? 3 : 2;
+        if (state.p1.noWaterCount >= 4) p1Spd -= (0.5 * (state.p1.noWaterCount - 3));
+
+        // スピード算出 (P2)
+        let p2Spd = 5;
+        if (state.p2.temp >= 6 && state.p2.temp <= 10) p2Spd = 7;
+        else if (state.p2.temp >= 10 && state.p2.temp <= 15) p2Spd = 10;
+        else if (state.p2.temp >= 15 && state.p2.temp <= 20) p2Spd = Math.max(5, 10 - (state.p2.temp - 15));
+        else if (state.p2.temp >= 20) p2Spd = Math.max(0, 5 - (state.p2.temp - 20));
+        if (c2.self.includes('cheer')) p2Spd += 1;
+        if (c1.target.includes('cheer')) p2Spd += 1;
+        if (state.p2.cheerCount > 0 && state.p2.cheerCount % 10 === 0) p2Spd += (state.p2.cheerCount * 0.5);
+        if (p2Stone > 0) p2Spd -= (state.p2.consecutiveStone > 1) ? (1 + (state.p2.consecutiveStone * 0.25)) : 1;
+        if (state.p2.stoneCount > 0 && state.p2.stoneCount % 10 === 0) p2Spd -= (state.p2.stoneCount * 0.5);
+        if (state.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (state.p2.progress >= 80) ? 3 : 2;
+        if (state.p2.noWaterCount >= 4) p2Spd -= (0.5 * (state.p2.noWaterCount - 3));
+
+        state.p1.progress += p1Spd;
+        state.p2.progress += p2Spd;
+        state.turn++;
+
+        // 画面の更新
+        document.getElementById('turn-count').innerText = state.turn;
+        document.getElementById('runner-p1').style.left = Math.min(state.p1.progress, 85) + "%";
+        document.getElementById('runner-p2').style.left = Math.min(state.p2.progress, 85) + "%";
+        
+        updateLaneColor('lane-p1', state.p1.temp);
+        updateLaneColor('lane-p2', state.p2.temp);
+
+        localKeep = c1.keep;
+
+        unlockScreen();
+        setupHandAndBoxes();
+        startTimer(300);
     }
 
     function sendChat() {
         const input = document.getElementById('chat-input');
         if(!input.value.trim()) return;
-        if(socket) {
+        if(socket && !isAIMode) {
             socket.emit('send_chat', `プレイヤー ${myPlayerNumber}: ${input.value}`);
         }
         input.value = '';
