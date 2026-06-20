@@ -28,14 +28,15 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// 🛡️ グローバルなソケットIDと部屋IDのバックアップマップ
-let socketToRoomMap = {};
+// 🔄 ネットの瞬きに耐えるためのグローバルセッションマップ
+let userSocketMap = {}; // username -> socket.id
+let socketUserMap = {}; // socket.id -> username
 
 // ランク判定用共通関数
 function getRank(rate) {
-  if (rate >= 20000) return "VIP";
-  else if (rate >= 15000) return "PREMIUM";
-  else if (rate >= 5000) return "ELITE";
+  if (rate >= 2000) return "VIP";
+  else if (rate >= 1500) return "PREMIUM";
+  else if (rate >= 500) return "ELITE";
   else return "NORMAL";
 }
 
@@ -74,25 +75,6 @@ async function updatePlayerResult(username, isWin, resultType) {
   return Math.abs(user.rate - oldRate);
 }
 
-// --- 部屋IDを3重の防壁で確実に逆引きするヘルパー関数 ---
-function getRoomId(socket) {
-  // 1. 本物のSocket.ioルーム（通信層）から取得を試みる
-  const rooms = Array.from(socket.rooms);
-  const foundry = rooms.find(r => r.startsWith('room_'));
-  if (foundry) return foundry;
-
-  // 2. バックアップマップから取得を試みる
-  if (socketToRoomMap[socket.id]) return socketToRoomMap[socket.id];
-
-  // 3. 最終手段として activeGames の全部屋を走査して特定する
-  for (let rId in activeGames) {
-    if (activeGames[rId].p1SocketId === socket.id || activeGames[rId].p2SocketId === socket.id) {
-      return rId;
-    }
-  }
-  return null;
-}
-
 // --- ゲームロジックの状態管理用オブジェクト ---
 let activeGames = {};
 let waitingQueue = [];
@@ -101,9 +83,6 @@ let reconnectTimers = {};
 app.use(express.static(__dirname));
 
 io.on('connection', (socket) => {
-    let currentUsername = null;
-    let isGuestUser = false;
-
     // アカウント登録
     socket.on('register', async (data) => {
         const { username, password } = data;
@@ -114,14 +93,26 @@ io.on('connection', (socket) => {
         socket.emit('register_res', { success: true, msg: "走者登録が完了しました！" });
     });
 
-    // ログイン
+    // ログイン（回線再接続時の紐付け更新処理付き）
     socket.on('login', async (data) => {
         const { username, password, token } = data;
         const user = await User.findOne({ username });
         if (user) {
             if ((token && user.password === token) || (password && user.password === password)) {
-                currentUsername = username;
-                return socket.emit('login_res', { success: true, username, rate: user.rate, rank: user.rank });
+                // セッションマップへの登録（古いIDを上書きして回線を修復）
+                userSocketMap[username] = socket.id;
+                socketUserMap[socket.id] = username;
+                
+                socket.emit('login_res', { success: true, username, rate: user.rate, rank: user.rank });
+                
+                // もし現在対戦中のゲーム部屋が存在していれば、自動的に Socket.io ルームへ再入室
+                for (let roomId in activeGames) {
+                    if (activeGames[roomId].p1 === username || activeGames[roomId].p2 === username) {
+                        socket.join(roomId);
+                        break;
+                    }
+                }
+                return;
             }
         }
         socket.emit('login_res', { success: false, msg: "認証に失敗しました" });
@@ -129,28 +120,29 @@ io.on('connection', (socket) => {
 
     // ゲストモードログイン
     socket.on('login_guest', () => {
-        isGuestUser = true;
-        currentUsername = "Guest_" + Math.floor(1000 + Math.random() * 9000);
-        socket.emit('login_res', { success: true, username: currentUsername, rate: "----", rank: "GUEST", isGuest: true });
+        let guestName = "Guest_" + Math.floor(1000 + Math.random() * 9000);
+        userSocketMap[guestName] = socket.id;
+        socketUserMap[socket.id] = guestName;
+        socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
     });
 
     // マッチングのエントリー
     socket.on('join_matchmaking', async () => {
-        if (!currentUsername) return;
-        const isQueued = waitingQueue.some(w => w.username === currentUsername);
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        const isQueued = waitingQueue.some(w => w.username === username);
         if (isQueued) return;
 
         let userRate = 100;
         let userRank = "NORMAL";
 
-        if (!isGuestUser) {
-            const user = await User.findOne({ username: currentUsername });
-            if (user) { userRate = user.rate; userRank = user.rank; }
-        }
+        const user = await User.findOne({ username });
+        if (user) { userRate = user.rate; userRank = user.rank; }
 
         waitingQueue.push({
             id: socket.id,
-            username: currentUsername,
+            username: username,
             rate: userRate,
             rank: userRank,
             socket: socket
@@ -166,50 +158,69 @@ io.on('connection', (socket) => {
 
     // カード移動のリアルタイム裏同期
     socket.on('player_move_card', (data) => {
-        const roomId = getRoomId(socket);
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
         if (roomId) {
             socket.to(roomId).emit('opponent_moving_card', data);
         }
     });
 
-    // イベント発動の予約（HTML側の申告通りに正確に処理）
+    // イベント発動の予約（ユーザー名ベースで確実に処理）
     socket.on('reserve_event', (data) => {
-        const roomId = getRoomId(socket);
-        if (!roomId) return;
-        const game = activeGames[roomId];
-        if (game) {
-            if (data.player === 1) game.p1Reserved = true;
-            if (data.player === 2) game.p2Reserved = true;
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (roomId) {
+            const game = activeGames[roomId];
+            if (data.player === 1 && username === game.p1) game.p1Reserved = true;
+            if (data.player === 2 && username === game.p2) game.p2Reserved = true;
         }
     });
 
-    // 配置確定ボタンの受け皿（逆引きした部屋に、HTML側から届いた正確なプレイヤー番号で確実にロック）
+    // 配置確定ボタンの受け皿（ユーザー名で完全に識別し、2人分揃ったら計算）
     socket.on('submit_turn', async (data) => {
-        const roomId = getRoomId(socket);
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
         if (!roomId) return;
-        
         const game = activeGames[roomId];
-        if (!game) return;
 
         const { player, choice } = data;
 
-        if (player === 1) {
+        if (player === 1 && username === game.p1) {
             game.p1Choice = choice;
-            game.p1Socket = socket; // 最新のソケットセッションを常に維持
-        } else if (player === 2) {
+        } else if (player === 2 && username === game.p2) {
             game.p2Choice = choice;
-            game.p2Socket = socket;
         }
 
-        // 両走者の配置が完全に揃ったらメイン計算エンジンを起動
+        // 両走者の配置が揃ったらターン計算を実行
         if (game.p1Choice && game.p2Choice) {
             await executeOnlineTurnLogic(roomId);
         }
     });
 
-    // 💬 チャットパケットの完璧な部屋内転送（これで100%相手に届く）
+    // チャットパケットの部屋内確実転送
     socket.on('send_chat', (msg) => {
-        const roomId = getRoomId(socket);
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
         if (roomId) {
             io.to(roomId).emit('receive_chat', msg);
         }
@@ -217,10 +228,15 @@ io.on('connection', (socket) => {
 
     // 5分制限時間切れによる遅延失格処理
     socket.on('player_timeout', async (data) => {
-        const roomId = getRoomId(socket);
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
         if (!roomId) return;
         const game = activeGames[roomId];
-        if (!game) return;
 
         let foulPlayer = (data.player === 1) ? game.p1 : game.p2;
         let winner = (data.player === 1) ? game.p2 : game.p1;
@@ -231,21 +247,25 @@ io.on('connection', (socket) => {
             let winChange = await updatePlayerResult(winner, true, 'timeout_win');
             let loseChange = await updatePlayerResult(foulPlayer, false, 'timeout_lose');
 
-            if (game.p1Socket) game.p1Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
-            if (game.p2Socket) game.p2Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
+            let p1SocketId = userSocketMap[game.p1];
+            let p2SocketId = userSocketMap[game.p2];
+
+            if (p1SocketId) io.to(p1SocketId).emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
+            if (p2SocketId) io.to(p2SocketId).emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
 
             delete activeGames[roomId];
         }, 2000);
     });
 
-    // 切断時のペナルティ処理
+    // 切断時のペナルティタイマー
     socket.on('disconnect', () => {
+        const username = socketUserMap[socket.id];
         waitingQueue = waitingQueue.filter(w => w.id !== socket.id);
-        delete socketToRoomMap[socket.id]; // 揮発した古い回線データを削除
+        delete socketUserMap[socket.id];
         
-        if (currentUsername && !isGuestUser && currentUsername !== 'admin') {
-            reconnectTimers[currentUsername] = setTimeout(async () => {
-                const user = await User.findOne({ username: currentUsername });
+        if (username && username !== 'admin' && !username.startsWith('Guest_')) {
+            reconnectTimers[username] = setTimeout(async () => {
+                const user = await User.findOne({ username: username });
                 if (user) {
                     user.rate = Math.max(0, user.rate - 200);
                     user.lose += 1;
@@ -253,18 +273,22 @@ io.on('connection', (socket) => {
                     await user.save();
                 }
 
-                const roomId = getRoomId(socket);
+                let roomId = null;
+                for (let rId in activeGames) {
+                    if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+                }
+
                 if (roomId && activeGames[roomId]) {
                     const game = activeGames[roomId];
-                    let opponent = (game.p1 === currentUsername) ? game.p2 : game.p1;
-                    let oppSocket = (game.p1 === currentUsername) ? game.p2Socket : game.p1Socket;
+                    let opponent = (game.p1 === username) ? game.p2 : game.p1;
+                    let oppSocketId = userSocketMap[opponent];
 
                     let winChange = await updatePlayerResult(opponent, true, 'disconnect_win');
-                    if (oppSocket) oppSocket.emit('game_over', { winner: opponent, rateChange: winChange });
+                    if (oppSocketId) io.to(oppSocketId).emit('game_over', { winner: opponent, rateChange: winChange });
 
                     delete activeGames[roomId];
                 }
-                delete reconnectTimers[currentUsername];
+                delete reconnectTimers[username];
             }, 5 * 60 * 1000);
         }
     });
@@ -292,7 +316,7 @@ async function executeOnlineTurnLogic(roomId) {
         for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
         if(maxType === 'water') { pData.temp -= maxCount; activeEvent = { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }; evText += `★${game.p1}：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
         else if(maxType === 'stone') { pData.debt += maxCount; activeEvent = { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }; evText += `★${game.p1}：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
-        else if(maxType === 'sun') { pData.temp += maxCount; activeEvent = { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }; evText += `★${game.p1}：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
+        else if(maxType === 'sun') { pData.temp += maxCount; activeEvent = { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }; evText += `★${game.p1}：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上上がった！\n`; }
         else if(maxType === 'cheer') { pData.progress += (maxCount * 4); activeEvent = { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }; evText += `★${game.p1}：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
         pData.wastePile[maxType] = 0; game.lastEventP1 = game.turn; game.p1Reserved = false;
         eventSender = 1;
@@ -441,15 +465,19 @@ async function executeOnlineTurnLogic(roomId) {
 
     if (isEnded) {
         setTimeout(async () => {
+            let p1SocketId = userSocketMap[game.p1];
+            let p2SocketId = userSocketMap[game.p2];
+
             if (winner === 'DRAW') {
-                io.to(roomId).emit('game_over', { winner: 'DRAW', rateChange: 0 });
+                if (p1SocketId) io.to(p1SocketId).emit('game_over', { winner: 'DRAW', rateChange: 0 });
+                if (p2SocketId) io.to(p2SocketId).emit('game_over', { winner: 'DRAW', rateChange: 0 });
             } else {
                 let loser = (winner === game.p1) ? game.p2 : game.p1;
                 let winChange = await updatePlayerResult(winner, true, resultType);
                 let loseChange = await updatePlayerResult(loser, false, resultType);
 
-                if (game.p1Socket) game.p1Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
-                if (game.p2Socket) game.p2Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
+                if (p1SocketId) io.to(p1SocketId).emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
+                if (p2SocketId) io.to(p2SocketId).emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
             }
             delete activeGames[roomId];
         }, 2600);
@@ -468,15 +496,9 @@ setInterval(async () => {
     p1.socket.join(roomId);
     p2.socket.join(roomId);
 
-    // バックアップマップに登録（3重の防壁）
-    socketToRoomMap[p1.socket.id] = roomId;
-    socketToRoomMap[p2.socket.id] = roomId;
-
     activeGames[roomId] = {
         p1: p1.username,
         p2: p2.username,
-        p1Socket: p1.socket,
-        p2Socket: p2.socket,
         p1Choice: null,
         p2Choice: null,
         turn: 1,
@@ -490,21 +512,21 @@ setInterval(async () => {
         }
     };
 
-    // 役割を強制自覚させてゲーム起動
+    // 🌟 最初から実名・レートをオープンにして両クライアントへ配信
     p1.socket.emit('assigned_player', 1);
     p1.socket.emit('match_found', {
         roomId: roomId,
         myRole: 1,
-        p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
-        p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
+        p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
+        p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
     });
 
     p2.socket.emit('assigned_player', 2);
     p2.socket.emit('match_found', {
         roomId: roomId,
         myRole: 2,
-        p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
-        p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
+        p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
+        p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
     });
 }, 1000);
 
