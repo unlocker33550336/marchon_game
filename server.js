@@ -1,4 +1,4 @@
-// server.js (クリア判定・寒冷ペナルティ完全網羅版)
+// server.js (1000%マラソン・凍結・対面開示バックエンド版)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -24,14 +24,12 @@ io.on('connection', (socket) => {
     if (!rooms.p1) { rooms.p1 = socket.id; socket.emit('assigned_player', 1); }
     else if (!rooms.p2) { rooms.p2 = socket.id; socket.emit('assigned_player', 2); io.emit('game_start'); }
 
+    // ドラッグ中の「？」影同期の中継
     socket.on('player_move_card', (data) => {
         socket.broadcast.emit('opponent_moving_card', { player: data.player, targetZone: data.targetZone });
     });
 
-    socket.on('send_chat', (msg) => { io.emit('receive_chat', msg); });
     socket.on('player_timeout', (data) => { io.emit('game_over_timeout', { foulPlayer: data.player }); });
-
-    // イベント発動ボタンの電波
     socket.on('reserve_event', (data) => {
         if(data.player === 1) rooms.eventsReserved.p1 = true;
         if(data.player === 2) rooms.eventsReserved.p2 = true;
@@ -44,8 +42,8 @@ io.on('connection', (socket) => {
         if (rooms.choices.p1 && rooms.choices.p2) {
             const nextResult = calculateOfficialLogic(rooms.choices.p1, rooms.choices.p2, rooms.state, rooms.eventsReserved, rooms.lastEventTurn);
             
-            // 🌟 ゴール判定のチェック
-            if(rooms.state.p1.progress >= 100 || rooms.state.p2.progress >= 100) {
+            // 🌟 ゴール判定を「1000%」に引き上げ！
+            if(rooms.state.p1.progress >= 1000 || rooms.state.p2.progress >= 1000) {
                 let winner = rooms.state.p1.progress >= rooms.state.p2.progress ? 1 : 2;
                 io.emit('game_clear', { winner: winner });
                 return;
@@ -63,11 +61,11 @@ io.on('connection', (socket) => {
 });
 
 function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
-    // 廃棄のストック
+    // 廃棄数の集計
     c1.waste.forEach(t => state.p1.wastePile[t]++);
     c2.waste.forEach(t => state.p2.wastePile[t]++);
 
-    // 大技イベントの発動処理
+    // イベント必殺技の発動
     let evText = "";
     ['p1', 'p2'].forEach(pKey => {
         if(evReserved[pKey]) {
@@ -77,10 +75,10 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
             for(let t in pData.wastePile) {
                 if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; }
             }
-            if(maxType === 'water') { pData.temp -= maxCount; evText += `★プレイヤー ${pKey==='p1'?1:2}が【天の涙】を発動！温度が ${maxCount}℃ 低下した！\\n`; }
-            else if(maxType === 'stone') { oppData.progress -= maxCount; evText += `★プレイヤー ${pKey==='p1'?1:2}が【避けられぬ現実】を発動！相手を ${maxCount}% 後退させた！\\n`; }
-            else if(maxType === 'sun') { pData.temp += maxCount; evText += `★プレイヤー ${pKey==='p1'?1:2}が【地獄の炎のおでむかえ】を発動！温度が ${maxCount}℃ 上昇した！\\n`; }
-            else if(maxType === 'cheer') { pData.progress += (maxCount * 4); evText += `★プレイヤー ${pKey==='p1'?1:2}が【大応援】を発動！ ${maxCount * 4}% 爆速前進！\\n`; }
+            if(maxType === 'water') { pData.temp -= maxCount; evText += `★P${pKey==='p1'?1:2}：【天の涙】温度が ${maxCount}℃ 下がった！\\n`; }
+            else if(maxType === 'stone') { oppData.progress = Math.max(0, oppData.progress - maxCount); evText += `★P${pKey==='p1'?1:2}：【避切れぬ現実】相手を ${maxCount}% 後退させた！\\n`; }
+            else if(maxType === 'sun') { pData.temp += maxCount; evText += `★P${pKey==='p1'?1:2}：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\\n`; }
+            else if(maxType === 'cheer') { pData.progress += (maxCount * 4); evText += `★P${pKey==='p1'?1:2}：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
             
             pData.wastePile[maxType] = 0;
             lastEv[pKey] = state.turn;
@@ -111,7 +109,7 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     state.p1.noWaterCount = p1Water === 0 ? state.p1.noWaterCount + 1 : 0;
     state.p2.noWaterCount = p2Water === 0 ? state.p2.noWaterCount + 1 : 0;
 
-    // P1の速度算出 (🌟 5℃未満の減速補正を追加)
+    // P1の速度算出 (🌟 5℃未満の凍結減速補正に対応！)
     let p1Spd = 5;
     if (state.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - state.p1.temp));
     else if (state.p1.temp >= 6 && state.p1.temp <= 10) p1Spd = 7;
@@ -124,7 +122,7 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     if (state.p1.cheerCount > 0 && state.p1.cheerCount % 10 === 0) p1Spd += (state.p1.cheerCount * 0.5);
     if (p1Stone > 0) p1Spd -= (state.p1.consecutiveStone > 1) ? (1 + (state.p1.consecutiveStone * 0.25)) : 1;
     if (state.p1.stoneCount > 0 && state.p1.stoneCount % 10 === 0) p1Spd -= (state.p1.stoneCount * 0.5);
-    if (state.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (state.p1.progress >= 80) ? 3 : 2;
+    if (state.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (state.p1.progress >= 800) ? 3 : 2;
     if (state.p1.noWaterCount >= 4) p1Spd -= (0.5 * (state.p1.noWaterCount - 3));
 
     // P2の速度算出
@@ -140,19 +138,19 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     if (state.p2.cheerCount > 0 && state.p2.cheerCount % 10 === 0) p2Spd += (state.p2.cheerCount * 0.5);
     if (p2Stone > 0) p2Spd -= (state.p2.consecutiveStone > 1) ? (1 + (state.p2.consecutiveStone * 0.25)) : 1;
     if (state.p2.stoneCount > 0 && state.p2.stoneCount % 10 === 0) p2Spd -= (state.p2.stoneCount * 0.5);
-    if (state.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (state.p2.progress >= 80) ? 3 : 2;
+    if (state.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (state.p2.progress >= 800) ? 3 : 2;
     if (state.p2.noWaterCount >= 4) p2Spd -= (0.5 * (state.p2.noWaterCount - 3));
 
     state.p1.progress += p1Spd;
     state.p2.progress += p2Spd;
 
-    // 🌟 答え合わせ用開示ログテキストの自動生成
-    let resLog = `----------------------------------------\\n` +
-                 `【第 ${state.turn} ターン 結果発表】\\n` +
+    // 🌟 パタパタ開示：ドン！と答え合わせをするログテキスト
+    let resLog = `========================================\\n` +
+                 `  【第 ${state.turn} ターン 答え合わせ発表】\\n` +
                  (evText ? evText : "") +
-                 `■ プレイヤー1の配置:\\n  自分:[${c1.self}] 相手:[${c1.target}] 廃棄:[${c1.waste}] 保留:[${c1.keep}]\\n` +
-                 `■ プレイヤー2の配置:\\n  自分:[${c2.self}] 相手:[${c2.target}] 廃棄:[${c2.waste}] 保留:[${c2.keep}]\\n` +
-                 `----------------------------------------`;
+                 `👤 P1の配置 -> [自分:${c1.self}] [相手:${c1.target}] [廃棄:${c1.waste}] [保留:${c1.keep}]\\n` +
+                 `👥 P2の配置 -> [自分:${c2.self}] [相手:${c2.target}] [廃棄:${c2.waste}] [保留:${c2.keep}]\\n` +
+                 `========================================`;
 
     state.turn++;
 
