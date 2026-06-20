@@ -1,4 +1,4 @@
-// server.js (手札消失バグ完全修正・1000%・マイナス壁対応)
+// server.js (ノーカット・不動敗北・陣地エフェクト完全中継版)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -13,8 +13,8 @@ let rooms = {
     eventsReserved: { p1: false, p2: false }, lastEventTurn: { p1: -99, p2: -99 },
     state: {
         turn: 1,
-        p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0 },
-        p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0 }
+        p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
+        p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 }
     }
 };
 
@@ -46,7 +46,6 @@ io.on('connection', (socket) => {
             }
 
             io.emit('round_result', nextResult);
-            // 次のターンのために選択肢を完全クリア
             rooms.choices.p1 = null; rooms.choices.p2 = null;
         }
     });
@@ -58,16 +57,21 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     c1.waste.forEach(t => state.p1.wastePile[t]++);
     c2.waste.forEach(t => state.p2.wastePile[t]++);
 
-    let evText = ""; let activeEvent = null;
+    let evText = ""; let activeEvent = null; let eventSender = null;
+    
     ['p1', 'p2'].forEach(pKey => {
         if(evReserved[pKey]) {
-            let pData = state[pKey]; let oppData = pKey === 'p1' ? state.p2 : state.p1;
+            let pData = state[pKey];
             let maxType = 'cheer'; let maxCount = -1;
             for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-            if(maxType === 'water') { pData.temp -= maxCount; activeEvent = { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }; evText += `★P${pKey==='p1'?1:2}：【天の涙】温度が ${maxCount}℃ 低下した！\\n`; }
-            else if(maxType === 'stone') { pData.debt += maxCount; activeEvent = { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }; evText += `★P${pKey==='p1'?1:2}：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
-            else if(maxType === 'sun') { pData.temp += maxCount; activeEvent = { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }; evText += `★P${pKey==='p1'?1:2}：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上昇した！\\n`; }
-            else if(maxType === 'cheer') { pData.progress += (maxCount * 4); activeEvent = { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }; evText += `★P${pKey==='p1'?1:2}：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+            
+            eventSender = (pKey === 'p1') ? 1 : 2;
+            
+            if(maxType === 'water') { pData.temp -= maxCount; activeEvent = { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }; evText += `★P${eventSender}：【天の涙】温度が ${maxCount}℃ 低下！\\n`; }
+            else if(maxType === 'stone') { pData.debt += maxCount; activeEvent = { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }; evText += `★P${eventSender}：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
+            else if(maxType === 'sun') { pData.temp += maxCount; activeEvent = { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }; evText += `★P${eventSender}：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上昇！\\n`; }
+            else if(maxType === 'cheer') { pData.progress += (maxCount * 4); activeEvent = { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }; evText += `★P${eventSender}：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+            
             pData.wastePile[maxType] = 0; lastEv[pKey] = state.turn; evReserved[pKey] = false;
         }
     });
@@ -114,6 +118,10 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     if(p2Spd < 0) { state.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
     else if(state.p2.debt > 0) { if(p2Spd >= state.p2.debt) { p2Spd -= state.p2.debt; state.p2.debt = 0; } else { state.p2.debt -= p2Spd; p2Spd = 0; } }
 
+    // 🌟 公式ルール「5ターン1歩も進めなかったらゲームオーバー」を完全中継
+    state.p1.consecutiveNoProgress = (p1Spd === 0) ? state.p1.consecutiveNoProgress + 1 : 0;
+    state.p2.consecutiveNoProgress = (p2Spd === 0) ? state.p2.consecutiveNoProgress + 1 : 0;
+
     state.p1.progress += p1Spd; state.p2.progress += p2Spd;
     
     let resLog = `========================================\\n` +
@@ -129,7 +137,7 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
         p1Temp: state.p1.temp, p2Temp: state.p2.temp,
         p1Debt: state.p1.debt, p2Debt: state.p2.debt,
         nextTurn: state.turn, keeps: { p1: c1.keep, p2: c2.keep },
-        resultLog: resLog, activeEvent: activeEvent,
+        resultLog: resLog, activeEvent: activeEvent, eventSender: eventSender,
         p1CanEvent: (state.turn >= 15 && (state.turn - lastEv.p1 >= 10)),
         p2CanEvent: (state.turn >= 15 && (state.turn - lastEv.p2 >= 10))
     };
