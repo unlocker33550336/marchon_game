@@ -858,6 +858,14 @@
             alert("レース進行中はエスケープロックがかかっています！勝負から逃げることは許されません。");
         }
     }
+
+    function logout() {
+        if (socket) {
+            socket.emit('logout_user', { username: myUsername });
+        }
+        clearAllBackup();
+        location.reload();
+    }
 </script>
 </body>
 </html>
