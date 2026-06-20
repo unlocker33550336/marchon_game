@@ -863,7 +863,17 @@
         if (socket) {
             socket.emit('logout_user', { username: myUsername });
         }
+        // トークンとセッション情報を徹底的に国境から抹殺
         clearAllBackup();
+        localStorage.removeItem('marathon_user');
+        localStorage.removeItem('marathon_token');
+        
+        // リロードする前に、一旦ロビー画面を強制非表示にして、認証画面を出す
+        document.getElementById('lobby-panel').classList.add('hidden');
+        document.getElementById('admin-panel').classList.add('hidden');
+        document.getElementById('auth-panel').classList.remove('hidden');
+        
+        // 最後にトドメのリロード
         location.reload();
     }
 </script>
