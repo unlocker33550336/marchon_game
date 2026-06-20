@@ -9,23 +9,24 @@
         .container { max-width: 600px; margin: 0 auto; padding: 5px; }
         h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-size: 22px; }
         
-        .marathon-track { background: #222; border: 2px solid #333; border-radius: 12px; padding: 15px 10px; margin-bottom: 15px; position: relative; height: 60px; }
-        .lane { height: 25px; border-bottom: 1px dashed #444; position: relative; display: flex; align-items: center; }
-        .lane:last-child { border-bottom: none; }
-        .lane-label { font-size: 10px; color: #888; position: absolute; left: 5px; z-index: 2; }
-        .goal-line { position: absolute; right: 20px; top: 0; bottom: 0; width: 4px; background: repeating-linear-gradient(0deg, #fff, #fff 5px, #000 5px, #000 10px); }
-        .runner { font-size: 20px; position: absolute; left: 0%; transition: left 1s ease-out; transform: translateX(10px); z-index: 3; }
+        /* --- マラソンコース（レーン個別の色変化に対応） --- */
+        .marathon-track { background: #222; border: 2px solid #333; border-radius: 12px; margin-bottom: 15px; position: relative; height: 70px; overflow: hidden; }
+        .lane { height: 35px; position: relative; display: flex; align-items: center; transition: background-color 0.5s ease; }
+        #lane-p1 { border-bottom: 1px dashed #444; background-color: #2e2e2e; }
+        #lane-p2 { background-color: #2e2e2e; }
+        
+        .lane-label { font-size: 11px; color: #fff; font-weight: bold; position: absolute; left: 5px; z-index: 2; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px; }
+        .goal-line { position: absolute; right: 20px; top: 0; bottom: 0; width: 4px; background: repeating-linear-gradient(0deg, #fff, #fff 5px, #000 5px, #000 10px); z-index: 1; }
+        .runner { font-size: 22px; position: absolute; left: 0%; transition: left 1s ease-out; transform: translateX(10px); z-index: 3; }
         
         .status-board { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; }
         .timer { font-size: 20px; color: #ffa502; font-weight: bold; font-family: monospace; }
 
         .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; }
         .connect-btn { background: #54a0ff; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .ai-btn { background: #10ac84; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
         .game-area { display: none; position: relative; }
-        /* 確定後に画面全体を覆って操作できなくする透明な壁 */
         .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.1); z-index: 10; display: none; border-radius: 12px; }
 
         .box-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
@@ -65,10 +66,10 @@
 <div class="container">
     <h1>THE MARATHON</h1>
     
-    <div class="marathon-track" id="track-bg">
+    <div class="marathon-track">
         <div class="goal-line"></div>
-        <div class="lane"><span class="lane-label">P1</span><div class="runner" id="runner-p1">🏃</div></div>
-        <div class="lane"><span class="lane-label">P2</span><div class="runner" id="runner-p2">🏃</div></div>
+        <div class="lane" id="lane-p1"><span class="lane-label">P1</span><div class="runner" id="runner-p1">🏃</div></div>
+        <div class="lane" id="lane-p2"><span class="lane-label">P2</span><div class="runner" id="runner-p2">🏃</div></div>
     </div>
 
     <div class="status-board">
@@ -77,9 +78,8 @@
     </div>
 
     <div class="connection-panel" id="connection-panel">
-        <h2>対戦モードの選択</h2>
-        <button class="connect-btn" onclick="connectToServer()">🌐 オンライン対戦（2人）</button>
-        <button class="ai-btn" onclick="startAIMode()">🤖 練習相手（AI対戦）</button>
+        <h2>オンライン対戦サーバーへの接続</h2>
+        <button class="connect-btn" onclick="connectToServer()">🌐 サーバーに接続して参戦</button>
     </div>
 
     <div class="waiting-screen" id="waiting-screen">
@@ -94,7 +94,7 @@
             <div class="drop-box" id="box-self"><div class="section-title">📥 自分用</div><div class="box-cards" id="zone-self"></div><div class="opponent-ghost" id="ghost-self">相手が配置中...</div></div>
             <div class="drop-box" id="box-target"><div class="section-title">📤 相手用</div><div class="box-cards" id="zone-target"></div><div class="opponent-ghost" id="ghost-target">相手が配置中...</div></div>
             <div class="drop-box" id="box-waste"><div class="section-title">🗑️ 廃棄</div><div class="box-cards" id="zone-waste"></div><div class="opponent-ghost" id="ghost-waste">相手が配置中...</div></div>
-            <div class="drop-box" id="box-keep"><div class="section-title">📦 保留</div><div class="box-cards" id="zone-keep"></div><div class="opponent-ghost" id="ghost-keep">相手が配置中...</div></div>
+            <div class="drop-box" id="box-keep"><div class="section-title">📦 保留 (最大1枚)</div><div class="box-cards" id="zone-keep"></div><div class="opponent-ghost" id="ghost-keep">相手が配置中...</div></div>
         </div>
 
         <div class="hand-section">
@@ -133,11 +133,10 @@
 <script>
     let socket = null;
     let myPlayerNumber = null; 
-    let isAIMode = false;
     let timerInterval = null;
     let timerSeconds = 300;
     let localKeep = [];
-    let isLocked = false; // 確定状態フラグ
+    let isLocked = false;
 
     window.onload = () => {
         const savedRole = localStorage.getItem('marathon_role');
@@ -148,7 +147,6 @@
     };
 
     function connectToServer() {
-        isAIMode = false;
         try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
 
         document.getElementById('connection-panel').style.display = 'none';
@@ -163,7 +161,7 @@
         socket.on('game_start', () => {
             document.getElementById('waiting-screen').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
-            unlockScreen(); // ロック解除
+            unlockScreen();
             setupHandAndBoxes();
             startTimer(300);
         });
@@ -182,7 +180,14 @@
             logs.scrollTop = logs.scrollHeight;
         });
 
-        // 🌟 サーバーから無事に結果を受信！
+        // 🌟 タイムオーバーによる失格処理を受信したとき
+        socket.on('game_over_timeout', (data) => {
+            clearInterval(timerInterval);
+            lockScreen();
+            document.getElementById('submit-btn').innerText = "ゲーム終了（時間切れ失格）";
+            alert(`【ゲーム終了】プレイヤー ${data.foulPlayer} が5分以上経過したため、遅延行為で失格となりました！`);
+        });
+
         socket.on('round_result', (data) => {
             document.getElementById('turn-count').innerText = data.nextTurn;
 
@@ -190,24 +195,42 @@
             document.getElementById('runner-p1').style.left = Math.min(data.p1Progress, 85) + "%";
             document.getElementById('runner-p2').style.left = Math.min(data.p2Progress, 85) + "%";
 
-            // 背景色更新
-            let myTemp = myPlayerNumber === 1 ? data.p1Temp : data.p2Temp;
-            let redValue = Math.min(18 + (myTemp * 12), 140);
-            document.getElementById('track-bg').style.backgroundColor = `rgb(${redValue}, 34, 34)`;
+            // 🌟【新演出】各レーン個別の温度段階カラー（案B）を適用！
+            updateLaneColor('lane-p1', data.p1Temp);
+            updateLaneColor('lane-p2', data.p2Temp);
 
             localKeep = data.keeps[myPlayerNumber === 1 ? 'p1' : 'p2'];
             
-            unlockScreen(); // 🌟 次のターンのために画面ロックを完全解除！
+            unlockScreen();
             setupHandAndBoxes();
             startTimer(300);
         });
+    }
+
+    // 温度に応じた路面色の塗り替え関数
+    function updateLaneColor(laneId, temp) {
+        const laneEl = document.getElementById(laneId);
+        if(!laneEl) return;
+        
+        if (temp < 5) {
+            laneEl.style.backgroundColor = "#4a69bd"; // 5℃未満：水色
+        } else if (temp === 5) {
+            laneEl.style.backgroundColor = "#2e2e2e"; // 5℃ちょうど：グレー
+        } else if (temp >= 6 && temp <= 9) {
+            laneEl.style.backgroundColor = "#f1c40f"; // 6℃〜9℃：黄色
+        } else if (temp >= 10 && temp <= 14) {
+            laneEl.style.backgroundColor = "#e67e22"; // 10℃〜14℃：オレンジ
+        } else if (temp >= 15) {
+            // 15℃以上は温度が上がるほど段階的に濃い赤へ
+            let depth = Math.min(150, 70 + (temp - 15) * 15);
+            laneEl.style.backgroundColor = `rgb(${depth}, 15, 15)`;
+        }
     }
 
     function lockScreen() {
         isLocked = true;
         document.getElementById('lock-overlay').style.display = 'block';
         document.getElementById('submit-btn').disabled = true;
-        document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
     }
 
     function unlockScreen() {
@@ -219,11 +242,23 @@
     }
 
     function notifyCardMove(parentElementId) {
-        if(isLocked) return; // 🌟 ロック中は相手への通知も送らない
-        if(!isAIMode && socket && parentElementId) {
+        if(isLocked) return;
+        if(socket && parentElementId) {
             let zoneName = parentElementId.replace('zone-', '').replace('box-', '');
             socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName });
         }
+    }
+
+    // 🌟【バグ修正】保留ボックスにカードがすでに1枚あるかチェックする関数
+    function canAddToKeep(cardId) {
+        const keepZone = document.getElementById('zone-keep');
+        // 移動させようとしているカード自身がすでに保留に入っているなら移動させてOK
+        const isAlreadyInKeep = document.getElementById(cardId)?.parentElement === keepZone;
+        if (keepZone.children.length >= 1 && !isAlreadyInKeep) {
+            alert("保留ボックスには1枚しかカードを置けません！");
+            return false;
+        }
+        return true;
     }
 
     function setupHandAndBoxes() {
@@ -257,13 +292,21 @@
 
         document.querySelectorAll('.card').forEach(card => {
             card.addEventListener('dragstart', (e) => {
-                if(isLocked) { e.preventDefault(); return; } // ロック中はドラッグ禁止
+                if(isLocked) { e.preventDefault(); return; }
                 e.dataTransfer.setData('text/plain', e.target.id);
             });
             card.onclick = () => {
-                if(isLocked) return; // 🌟 確定後はタップ移動も完全無効化！
+                if(isLocked) return;
                 const zones = ['zone-hand', 'zone-self', 'zone-target', 'zone-waste', 'zone-keep'];
-                let nextIdx = (zones.indexOf(card.parentElement.id) + 1) % zones.length;
+                let currentIdx = zones.indexOf(card.parentElement.id);
+                let nextIdx = (currentIdx + 1) % zones.length;
+                
+                // 次が保留ゾーンなら1枚制限をチェック
+                if (zones[nextIdx] === 'zone-keep' && !canAddToKeep(card.id)) {
+                    // 保留がいっぱいなら保留をスキップして手札に戻す
+                    nextIdx = 0; 
+                }
+                
                 const nextZoneEl = document.getElementById(zones[nextIdx]);
                 nextZoneEl.appendChild(card);
                 notifyCardMove(nextZoneEl.id);
@@ -275,8 +318,14 @@
         zone.addEventListener('dragover', (e) => e.preventDefault());
         zone.addEventListener('drop', (e) => {
             e.preventDefault();
-            if(isLocked) return; // ロック中はドロップ拒否
+            if(isLocked) return;
             const id = e.dataTransfer.getData('text/plain');
+            
+            // 🌟 ドロップ先が保留ゾーンなら1枚制限をチェック
+            if ((zone.id === 'zone-keep' || zone.parentElement.id === 'box-keep') && !canAddToKeep(id)) {
+                return; // 弾く
+            }
+            
             const dragged = document.getElementById(id);
             if (dragged) {
                 zone.appendChild(dragged);
@@ -292,9 +341,11 @@
         timerInterval = setInterval(() => {
             timerSeconds--;
             updateTimerDisplay();
+            
+            // 🌟【新機能】5分（0秒）になったら遅延行為としてサーバーに即通知
             if (timerSeconds <= 0) {
                 clearInterval(timerInterval);
-                submitOnlineTurn();
+                socket.emit('player_timeout', { player: myPlayerNumber });
             }
         }, 1000);
     }
@@ -323,7 +374,8 @@
             return;
         }
 
-        lockScreen(); // 🌟 画面を完全にロック状態にする
+        lockScreen();
+        document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
         socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
     }
 
@@ -342,8 +394,6 @@
         document.getElementById('tab-rule-btn').className = tab === 'rule' ? 'tab-btn active' : 'tab-btn';
         document.getElementById('tab-chat-btn').className = tab === 'chat' ? 'tab-btn active' : 'tab-btn';
     }
-    
-    function startAIMode() { alert("オンラインモードでプレイしてください"); }
 </script>
 </body>
 </html>
