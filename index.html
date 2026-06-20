@@ -51,7 +51,6 @@
         .card[data-type="cheer"] { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
         .card.mystery-card { background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #7f8c8d; color: #fff; font-size: 20px; font-weight: bold; cursor: not-allowed; }
 
-        /* 🌟 陣地直撃型カットイン演出用スタイル */
         .field-cutin { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: white; z-index: 20; display: none; text-shadow: 0 2px 4px rgba(0,0,0,0.8); box-shadow: inset 0 0 20px rgba(255,255,255,0.2); animation: fieldCutAnim 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         @keyframes fieldCutAnim { 0% { transform: scaleY(0); opacity: 0; } 100% { transform: scaleY(1); opacity: 1; } }
 
@@ -63,14 +62,12 @@
 
         .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px; width: 100%; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
         
-        /* チャット＆ルール説明統合パネル */
         .bottom-info-panel { background: #1e1e1e; border: 1px solid #333; padding: 12px; border-radius: 12px; margin-top: 15px; }
         .chat-input-area { display: flex; gap: 5px; margin-top: 8px; }
         .chat-input-area input { flex: 1; padding: 8px; background: #26262b; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 12px; }
         .chat-send-btn { background: #54a0ff; color: #fff; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .chat-logs { max-height: 140px; overflow-y: auto; font-family: monospace; color: #4cd137; white-space: pre-wrap; line-height: 1.4; font-size: 12px; }
         
-        /* 🌟 公式ルール説明文専用セクション */
         .official-rule-board { background: #16161a; border: 1px solid #444; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 12px; line-height: 1.6; color: #ccc; }
         .rule-title { font-size: 14px; color: #ffa502; font-weight: bold; margin-bottom: 8px; border-bottom: 1px dashed #444; padding-bottom: 4px; }
     </style>
@@ -121,7 +118,6 @@
         <div class="lock-overlay" id="lock-overlay"></div>
 
         <div class="field-board">
-            <!-- 自分側のフィールド列と直撃エフェクト板 -->
             <div class="field-section-title">👤 自分側のフィールド</div>
             <div class="field-row" id="my-field-row">
                 <div class="field-cutin" id="cutin-my-field"></div>
@@ -131,7 +127,6 @@
                 <div class="card-slot" id="slot-my-keep"><span class="slot-label">📦保留</span></div>
             </div>
 
-            <!-- 相手側のフィールド列と直撃エフェクト板 -->
             <div class="field-section-title" style="margin-top:15px;">👥 相手側のフィールド</div>
             <div class="field-row opponent-row" id="opp-field-row">
                 <div class="field-cutin" id="cutin-opp-field"></div>
@@ -158,14 +153,13 @@
         </div>
     </div>
 
-    <!-- 🌟 君の指定通りの文章を完全内蔵した公式ルールボード -->
     <div class="official-rule-board">
         <div class="rule-title">マラソンゲーム</div>
         <p><strong>＜ルール＞</strong></p>
         <p>これは、自分と敵（相手）のどちらがゴールできるのかのゲームです。</p>
         <p>クリア条件は先にゴールすることです。5ターン1歩も進めなかったらゲームオーバーです。また、1ターンに5分以上をかけた場合は遅延行為で失格となります。</p>
-        <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。そして、その試練は全て自分達で用意します。</p>
-        <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えてしていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
+        <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。安定して進むための試練は全て自分達で用意します。</p>
+        <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
         <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、毎ターン5分以内にカードをボックスに設置してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
         <p>カードは全部で4種類あり、それぞれ水カード、石カード、太陽カード、応援カードです。水カードはプレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。石カードはプレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落とします。太陽カードはプレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。応援カードはプレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</p>
         <p>初期の気温は5℃です。</p>
@@ -184,21 +178,71 @@
     let isLocked = false;
     let eventReserved = false;
 
-    // 🤖 AIモード用ローカル状態（1文字も削らずマイルストーン完備）
     let aiState = {
         turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
         p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
         p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 }
     };
 
+    // 🌟 ページ読み込み時に自動でバックアップ（セーブ）を確認して復旧を試みる
+    window.onload = function() {
+        const savedMode = localStorage.getItem('marathon_mode');
+        if (savedMode === 'ai') {
+            const savedState = localStorage.getItem('marathon_ai_state');
+            const savedKeep = localStorage.getItem('marathon_local_keep');
+            if (savedState) {
+                aiState = JSON.parse(savedState);
+                localKeep = savedKeep ? JSON.parse(savedKeep) : [];
+                isAIMode = true;
+                
+                // 画面要素をプレイ中に引き戻す
+                document.getElementById('connection-panel').style.display = 'none';
+                document.getElementById('game-area').style.display = 'block';
+                document.getElementById('menu-back-btn').disabled = true;
+                
+                // 表示盤面の同期
+                document.getElementById('turn-count').innerText = aiState.turn;
+                document.getElementById('runner-p1').style.left = Math.min((aiState.p1.progress / 10), 85) + "%";
+                document.getElementById('runner-p2').style.left = Math.min((aiState.p2.progress / 10), 85) + "%";
+                updateLaneColor('lane-p1', aiState.p1.temp);
+                updateLaneColor('lane-p2', aiState.p2.temp);
+                updateDebtBadge('debt-p1', aiState.p1.debt);
+                updateDebtBadge('debt-p2', aiState.p2.debt);
+                
+                document.getElementById('event-panel').style.display = (aiState.turn >= 15 && (aiState.turn - aiState.lastEventP1 >= 10)) ? 'block' : 'none';
+                
+                const savedLogs = localStorage.getItem('marathon_logs');
+                if(savedLogs) { document.getElementById('chat-logs').innerHTML = savedLogs; }
+                
+                unlockScreen();
+                setupHandAndBoxes();
+                startTimer(300);
+                writeLog("【システム】前回のAI対戦データから自動復帰しました！");
+            }
+        } else if (savedMode === 'online') {
+            // オンラインモードだった場合は、サーバーへ「再接続して部屋へ再入場」を要請する
+            connectToServer();
+        }
+    };
+
     function connectToServer() {
         isAIMode = false;
+        // リロード対策として既存のプレイヤー記録枠をサーバーへ名乗れるように保持
+        const savedOnlineRole = localStorage.getItem('marathon_online_role');
+        
         try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
         document.getElementById('connection-panel').style.display = 'none';
-        document.getElementById('waiting-screen').style.display = 'block';
+        
+        // サーバーへ「俺リロードから戻ってきたよ」という申告電波を投げる
+        if(savedOnlineRole) {
+            socket.emit('reconnect_player', { savedRole: parseInt(savedOnlineRole) });
+        }
 
         socket.on('assigned_player', (num) => {
             myPlayerNumber = num;
+            localStorage.setItem('marathon_mode', 'online');
+            localStorage.setItem('marathon_online_role', num);
+            document.getElementById('waiting-screen').style.display = 'block';
             document.getElementById('player-role-text').innerText = `あなたは「プレイヤー ${num}」です。`;
         });
 
@@ -207,6 +251,32 @@
             document.getElementById('game-area').style.display = 'block';
             document.getElementById('menu-back-btn').disabled = true;
             unlockScreen(); setupHandAndBoxes(); startTimer(300);
+        });
+
+        // 🌟 サーバーに保持されていた最新データでリロード画面を安全に完全復元する
+        socket.on('restore_online_state', (syncData) => {
+            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('menu-back-btn').disabled = true;
+            myPlayerNumber = syncData.role;
+            
+            document.getElementById('turn-count').innerText = syncData.state.turn;
+            document.getElementById('runner-p1').style.left = Math.min((syncData.state.p1.progress / 10), 85) + "%";
+            document.getElementById('runner-p2').style.left = Math.min((syncData.state.p2.progress / 10), 85) + "%";
+            
+            updateLaneColor('lane-p1', syncData.state.p1.temp);
+            updateLaneColor('lane-p2', syncData.state.p2.temp);
+            updateDebtBadge('debt-p1', syncData.state.p1.debt);
+            updateDebtBadge('debt-p2', syncData.state.p2.debt);
+            
+            document.getElementById('event-panel').style.display = (myPlayerNumber === 1 ? syncData.p1CanEvent : syncData.p2CanEvent) ? 'block' : 'none';
+            
+            localKeep = syncData.currentKeep;
+            
+            unlockScreen();
+            setupHandAndBoxes();
+            startTimer(syncData.remainTimer);
+            writeLog("【システム】通信切断・リロードからオンライン対戦へ自動復帰しました。");
         });
 
         socket.on('opponent_moving_card', (data) => {
@@ -222,16 +292,26 @@
         });
 
         socket.on('receive_chat', (msg) => { writeLog(msg); });
-        socket.on('game_over_timeout', (data) => { clearInterval(timerInterval); lockScreen(); writeLog(`\n【遅延行為】プレイヤー ${data.foulPlayer} が時間切れにより失格。`); document.getElementById('menu-back-btn').disabled = false; });
-        socket.on('game_clear', (data) => { clearInterval(timerInterval); lockScreen(); writeLog(`\n🎉 【ゴール達成】勝者：プレイヤー ${data.winner}！`); document.getElementById('menu-back-btn').disabled = false; });
+        
+        socket.on('game_over_timeout', (data) => {
+            clearInterval(timerInterval); lockScreen();
+            writeLog(`\n【遅延行為】プレイヤー ${data.foulPlayer} が時間切れにより失格。`);
+            document.getElementById('menu-back-btn').disabled = false;
+            clearAllBackup();
+        });
+
+        socket.on('game_clear', (data) => {
+            clearInterval(timerInterval); lockScreen();
+            writeLog(`\n🎉 【ゴール達成】勝者：プレイヤー ${data.winner}！`);
+            document.getElementById('menu-back-btn').disabled = false;
+            clearAllBackup();
+        });
 
         socket.on('round_result', (data) => {
             let oppChoice = myPlayerNumber === 1 ? data.p2ChoiceRaw : data.p1ChoiceRaw;
             revealOpponentCards(oppChoice);
 
-            // 🌟 オンライン戦での陣地直撃カットイン演出処理
             if(data.activeEvent) {
-                // 発動したプレイヤーが自分自身（myPlayerNumber）と同じなら上段、違うなら下段
                 let targetCutinId = (data.eventSender === myPlayerNumber) ? 'cutin-my-field' : 'cutin-opp-field';
                 triggerFieldCutin(targetCutinId, data.activeEvent);
             }
@@ -262,6 +342,10 @@
 
     function startAIMode() {
         isAIMode = true; myPlayerNumber = 1;
+        localStorage.setItem('marathon_mode', 'ai');
+        localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
+        localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
+        
         document.getElementById('connection-panel').style.display = 'none';
         document.getElementById('game-area').style.display = 'block';
         document.getElementById('menu-back-btn').disabled = true;
@@ -285,7 +369,6 @@
         }
     }
 
-    // 🌟【新UI演出】指定の陣地フィールド列に、大技の帯カットインを炸裂させる関数
     function triggerFieldCutin(elementId, evtInfo) {
         const board = document.getElementById(elementId);
         board.innerText = evtInfo.title;
@@ -310,6 +393,7 @@
     function writeLog(msg) {
         const logs = document.getElementById('chat-logs');
         logs.innerHTML += `\n${msg}`; logs.scrollTop = logs.scrollHeight;
+        if(isAIMode) { localStorage.setItem('marathon_logs', logs.innerHTML); }
     }
 
     function updateLaneColor(laneId, temp) {
@@ -406,7 +490,7 @@
             timerSeconds--; updateTimerDisplay();
             if (timerSeconds <= 0) {
                 clearInterval(timerInterval);
-                if (isAIMode) { lockScreen(); document.getElementById('menu-back-btn').disabled = false; alert("遅延失格によりゲームオーバー！"); }
+                if (isAIMode) { lockScreen(); document.getElementById('menu-back-btn').disabled = false; clearAllBackup(); alert("遅延失格によりゲームオーバー！"); }
                 else { socket.emit('player_timeout', { player: myPlayerNumber }); }
             }
         }, 1000);
@@ -443,15 +527,14 @@
             setTimeout(() => { executeAILogic(choice); }, 500);
         } else {
             document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
-            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
+            // サーバー側リロード救済用：今の残りタイマー時間を添えて送信
+            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice, currentTimer: timerSeconds });
         }
     }
 
-    // 🤖 AI（練習モード）完全無削り・ロジックシミュレートエンジン
     function executeAILogic(p1Choice) {
         let aiChoice = { self: [], target: [], waste: [], keep: [] };
         let types = ['sun', 'stone', 'water', 'cheer'];
-        
         let available = types.filter(t => !localKeep.includes(t)); 
         
         if (Math.random() < 0.25 && available.length > 0) {
@@ -502,7 +585,6 @@
             if (p1Choice.self.includes('cheer')) s.p1.cheerCount++; if (aiChoice.target.includes('cheer')) s.p1.cheerCount++;
             if (aiChoice.self.includes('cheer')) s.p2.cheerCount++; if (p1Choice.target.includes('cheer')) s.p2.cheerCount++;
 
-            // P1計算
             let p1Spd = 5; if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp)); else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7; else if (s.p1.temp >= 10 && s.p1.temp <= 15) p1Spd = 10; else if (s.p1.temp >= 15 && s.p1.temp <= 20) p1Spd = Math.max(5, 10 - (s.p1.temp - 15)); else if (s.p1.temp >= 20) p1Spd = Math.max(0, 5 - (s.p1.temp - 20));
             if (p1Choice.self.includes('cheer')) p1Spd += 1; if (aiChoice.target.includes('cheer')) p1Spd += 1;
             if (s.p1.cheerCount > 0 && s.p1.cheerCount % 10 === 0) p1Spd += (s.p1.cheerCount * 0.5);
@@ -515,7 +597,6 @@
             if (s.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (s.p1.progress >= 800) ? 3 : 2;
             if (s.p1.noWaterCount >= 4) p1Spd -= (0.5 * (s.p1.noWaterCount - 3));
 
-            // P2計算
             let p2Spd = 5; if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp)); else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7; else if (s.p2.temp >= 10 && s.p2.temp <= 15) p2Spd = 10; else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15)); else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
             if (aiChoice.self.includes('cheer')) p2Spd += 1; if (p1Choice.target.includes('cheer')) p2Spd += 1;
             if (s.p2.cheerCount > 0 && s.p2.cheerCount % 10 === 0) p2Spd += (s.p2.cheerCount * 0.5);
@@ -528,19 +609,17 @@
             if (s.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (s.p2.progress >= 800) ? 3 : 2;
             if (s.p2.noWaterCount >= 4) p2Spd -= (0.5 * (s.p2.noWaterCount - 3));
 
-            // 壁精算
             if(p1Spd < 0) { s.p1.debt += Math.abs(p1Spd); p1Spd = 0; }
             else if(s.p1.debt > 0) { if(p1Spd >= s.p1.debt) { p1Spd -= s.p1.debt; s.p1.debt = 0; } else { s.p1.debt -= p1Spd; p1Spd = 0; } }
 
             if(p2Spd < 0) { s.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
             else if(s.p2.debt > 0) { if(p2Spd >= s.p2.debt) { p2Spd -= s.p2.debt; s.p2.debt = 0; } else { s.p2.debt -= p2Spd; p2Spd = 0; } }
 
-            // 5ターン足止め敗北判定チェック
             s.p1.consecutiveNoProgress = (p1Spd === 0) ? s.p1.consecutiveNoProgress + 1 : 0;
             s.p2.consecutiveNoProgress = (p2Spd === 0) ? s.p2.consecutiveNoProgress + 1 : 0;
 
-            if(s.p1.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); alert("5ターン一歩も進めなかったため、ゲームオーバーです。"); return; }
-            if(s.p2.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); alert("相手が5ターン一歩も進めなかったため、あなたの勝ちです！"); return; }
+            if(s.p1.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert("5ターン一歩も進めなかったため、ゲームオーバーです。"); return; }
+            if(s.p2.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert("相手が5ターン一歩も進めなかったため、あなたの勝ちです！"); return; }
 
             s.p1.progress += p1Spd; s.p2.progress += p2Spd;
 
@@ -558,16 +637,28 @@
             updateLaneColor('lane-p1', s.p1.temp); updateLaneColor('lane-p2', s.p2.temp);
             updateDebtBadge('debt-p1', s.p1.debt); updateDebtBadge('debt-p2', s.p2.debt);
 
-            if(s.p1.progress >= 1000 || s.p2.progress >= 1000) { clearInterval(timerInterval); lockScreen(); alert(s.p1.progress >= s.p2.progress ? "あなたの勝ち！" : "AIの勝ち！"); return; }
+            // AIモード最新盤面データのバックアップセーブ
+            localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
+            localKeep = p1Choice.keep;
+            localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
+
+            if(s.p1.progress >= 1000 || s.p2.progress >= 1000) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert(s.p1.progress >= s.p2.progress ? "あなたの勝ち！" : "AIの勝ち！"); return; }
             document.getElementById('event-panel').style.display = (s.turn >= 15 && (s.turn - s.lastEventP1 >= 10)) ? 'block' : 'none';
 
-            localKeep = p1Choice.keep; eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
+            eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
             unlockScreen(); setupHandAndBoxes(); startTimer(300);
         }, 2500);
     }
 
-    function sendChat() { const input = document.getElementById('chat-input'); if(!input.value.trim() || isAIMode) return; socket.emit('send_chat', `プレイヤー ${myPlayerNumber}: ${input.value}`); input.value = ''; }
-    function backToMenu() { window.location.reload(); }
+    function clearAllBackup() {
+        localStorage.removeItem('marathon_mode');
+        localStorage.removeItem('marathon_ai_state');
+        localStorage.removeItem('marathon_local_keep');
+        localStorage.removeItem('marathon_logs');
+        localStorage.removeItem('marathon_online_role');
+    }
+
+    function backToMenu() { clearAllBackup(); window.location.reload(); }
 </script>
 </body>
 </html>
