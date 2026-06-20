@@ -55,7 +55,7 @@ async function updatePlayerResult(username, isWin, resultType) {
     let change = 0;
     if (resultType === 'goal') change = 300;
     else if (resultType === 'immobilize') change = 150;
-    else change = 50; // 不戦勝やその他の勝ち
+    else change = 50;
     
     user.win += 1;
     user.rate = user.rate + change;
@@ -68,7 +68,6 @@ async function updatePlayerResult(username, isWin, resultType) {
   user.rank = getRank(user.rate);
   await user.save();
 
-  // クライアントのアラート表示用に実際の変動幅を返却
   return Math.abs(user.rate - oldRate);
 }
 
@@ -106,7 +105,7 @@ io.on('connection', (socket) => {
         socket.emit('login_res', { success: false, msg: "認証に失敗しました" });
     });
 
-    // 【新規実装】ゲストモードログイン
+    // ゲストモードログイン
     socket.on('login_guest', () => {
         isGuestUser = true;
         currentUsername = "Guest_" + Math.floor(1000 + Math.random() * 9000);
@@ -143,33 +142,38 @@ io.on('connection', (socket) => {
         socket.emit('matchmaking_stopped');
     });
 
-    // 【新規実装】カード移動のリアルタイム裏同期（裏向きの「？」カードを表示させる）
+    // カード移動のリアルタイム裏同期
     socket.on('player_move_card', (data) => {
         if (socket.currentRoomId) {
             socket.to(socket.currentRoomId).emit('opponent_moving_card', data);
         }
     });
 
-    // 【新規実装】イベント発動の予約受け付け
-    socket.on('reserve_event', (data) => {
+    // 【鉄壁化】イベント発動の予約（ソケットIDで厳格に仕分け）
+    socket.on('reserve_event', () => {
         if (socket.currentRoomId) {
             const game = activeGames[socket.currentRoomId];
             if (game) {
-                if (data.player === 1) game.p1Reserved = true;
-                if (data.player === 2) game.p2Reserved = true;
+                if (socket.id === game.p1Socket.id) game.p1Reserved = true;
+                if (socket.id === game.p2Socket.id) game.p2Reserved = true;
             }
         }
     });
 
-    // 【新規実装】配置確定ボタン（submit_turn）の受け皿 ＆ ターン計算処理
+    // 【鉄壁化】配置確定ボタンの受け皿（クライアントの自己申告を無視してソケットIDで100%識別）
     socket.on('submit_turn', async (data) => {
         if (!socket.currentRoomId) return;
         const game = activeGames[socket.currentRoomId];
         if (!game) return;
 
-        const { player, choice } = data;
-        if (player === 1) game.p1Choice = choice;
-        if (player === 2) game.p2Choice = choice;
+        const { choice } = data;
+
+        // 誰の回線から届いたデータかでP1/P2を完璧に仕分ける
+        if (socket.id === game.p1Socket.id) {
+            game.p1Choice = choice;
+        } else if (socket.id === game.p2Socket.id) {
+            game.p2Choice = choice;
+        }
 
         // 両走者の配置が揃ったらターン計算を実行
         if (game.p1Choice && game.p2Choice) {
@@ -177,21 +181,22 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 【新規実装】チャットパケットの部屋内転送
+    // チャットパケットの部屋内転送
     socket.on('send_chat', (msg) => {
         if (socket.currentRoomId) {
             io.to(socket.currentRoomId).emit('receive_chat', msg);
         }
     });
 
-    // 【新規実装】5分制限時間切れによる遅延失格処理
-    socket.on('player_timeout', async (data) => {
+    // 【鉄壁化】5分制限時間切れによる遅延失格処理
+    socket.on('player_timeout', async () => {
         if (!socket.currentRoomId) return;
         const game = activeGames[socket.currentRoomId];
         if (!game) return;
 
-        let foulPlayer = (data.player === 1) ? game.p1 : game.p2;
-        let winner = (data.player === 1) ? game.p2 : game.p1;
+        let isP1 = (socket.id === game.p1Socket.id);
+        let foulPlayer = isP1 ? game.p1 : game.p2;
+        let winner = isP1 ? game.p2 : game.p1;
 
         io.to(socket.currentRoomId).emit('game_over_timeout', { foulPlayer: foulPlayer });
 
@@ -219,7 +224,6 @@ io.on('connection', (socket) => {
                     await user.save();
                 }
 
-                // 対戦中に戻らなかった場合、残された相手を不戦勝にする
                 if (socket.currentRoomId && activeGames[socket.currentRoomId]) {
                     const game = activeGames[socket.currentRoomId];
                     let opponent = (game.p1 === currentUsername) ? game.p2 : game.p1;
@@ -236,7 +240,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// 【新規実装】2人の入力カードを元に、ゲーム展開をシミュレートするメイン計算エンジン
+// 2人の入力カードを元に、ゲーム展開をシミュレートするメイン計算エンジン
 async function executeOnlineTurnLogic(roomId) {
     const game = activeGames[roomId];
     if (!game) return;
@@ -245,7 +249,6 @@ async function executeOnlineTurnLogic(roomId) {
     let p1Choice = game.p1Choice;
     let p2Choice = game.p2Choice;
 
-    // 廃棄枠の累積加算
     p1Choice.waste.forEach(t => s.p1.wastePile[t]++);
     p2Choice.waste.forEach(t => s.p2.wastePile[t]++);
 
@@ -253,7 +256,6 @@ async function executeOnlineTurnLogic(roomId) {
     let activeEvent = null;
     let eventSender = 0;
 
-    // P1のイベント発動処理
     if (game.p1Reserved) {
         let pData = s.p1;
         let maxType = 'cheer'; let maxCount = -1;
@@ -266,7 +268,6 @@ async function executeOnlineTurnLogic(roomId) {
         eventSender = 1;
     }
 
-    // P2のイベント発動処理
     if (game.p2Reserved) {
         let pData = s.p2;
         let maxType = 'cheer'; let maxCount = -1;
@@ -280,16 +281,13 @@ async function executeOnlineTurnLogic(roomId) {
         if (!activeEvent) { activeEvent = currentEvent; eventSender = 2; }
     }
 
-    // 太陽カードチェック
     let p1Sun = p1Choice.self.includes('sun') || p2Choice.target.includes('sun');
     let p2Sun = p2Choice.self.includes('sun') || p1Choice.target.includes('sun');
     if (p1Sun) s.p1.temp++; if (p2Sun) s.p2.temp++;
 
-    // 応援蓄積
     if (p1Choice.self.includes('cheer')) s.p1.cheerCount++; if (p2Choice.target.includes('cheer')) s.p1.cheerCount++;
     if (p2Choice.self.includes('cheer')) s.p2.cheerCount++; if (p1Choice.target.includes('cheer')) s.p2.cheerCount++;
 
-    // --- P1 スピード演算 ---
     let p1Spd = 5;
     if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp));
     else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7;
@@ -311,7 +309,6 @@ async function executeOnlineTurnLogic(roomId) {
     if (s.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (s.p1.progress >= 800) ? 3 : 2;
     if (s.p1.noWaterCount >= 4) p1Spd -= (0.5 * (s.p1.noWaterCount - 3));
 
-    // --- P2 スピード演算 ---
     let p2Spd = 5;
     if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp));
     else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7;
@@ -319,6 +316,7 @@ async function executeOnlineTurnLogic(roomId) {
     else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15));
     else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
 
+    if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp));
     if (p2Choice.self.includes('cheer')) p2Spd += 1; if (p1Choice.target.includes('cheer')) p2Spd += 1;
     if (s.p2.cheerCount > 0 && s.p2.cheerCount % 10 === 0) p2Spd += (s.p2.cheerCount * 0.5);
 
@@ -333,22 +331,18 @@ async function executeOnlineTurnLogic(roomId) {
     if (s.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (s.p2.progress >= 800) ? 3 : 2;
     if (s.p2.noWaterCount >= 4) p2Spd -= (0.5 * (s.p2.noWaterCount - 3));
 
-    // 壁（debt）の減算処理
     if(p1Spd < 0) { s.p1.debt += Math.abs(p1Spd); p1Spd = 0; }
     else if(s.p1.debt > 0) { if(p1Spd >= s.p1.debt) { p1Spd -= s.p1.debt; s.p1.debt = 0; } else { s.p1.debt -= p1Spd; p1Spd = 0; } }
 
     if(p2Spd < 0) { s.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
     else if(s.p2.debt > 0) { if(p2Spd >= s.p2.debt) { p2Spd -= s.p2.debt; s.p2.debt = 0; } else { s.p2.debt -= p2Spd; p2Spd = 0; } }
 
-    // 不動カウント判定
     s.p1.consecutiveNoProgress = (p1Spd === 0) ? s.p1.consecutiveNoProgress + 1 : 0;
     s.p2.consecutiveNoProgress = (p2Spd === 0) ? s.p2.consecutiveNoProgress + 1 : 0;
 
-    // 前進適用
     s.p1.progress += p1Spd;
     s.p2.progress += p2Spd;
 
-    // ログ生成
     let resultLog = `========================================\n` +
                  `   【第 ${game.turn} ターン 結果発表】\n` +
                  (evText ? evText : "") +
@@ -364,7 +358,6 @@ async function executeOnlineTurnLogic(roomId) {
     let p1CanEvent = (game.turn >= 15 && (game.turn - game.lastEventP1 >= 10));
     let p2CanEvent = (game.turn >= 15 && (game.turn - game.lastEventP2 >= 10));
 
-    // 同期情報をクライアントへ送信
     io.to(roomId).emit('round_result', {
         p1ChoiceRaw: p1Choice,
         p2ChoiceRaw: p2Choice,
@@ -387,16 +380,13 @@ async function executeOnlineTurnLogic(roomId) {
         eventSender
     });
 
-    // 選択肢のリセット
     game.p1Choice = null;
     game.p2Choice = null;
 
-    // --- 決着判定ロジック ---
     let isEnded = false;
     let winner = null;
     let resultType = 'normal';
 
-    // 1. 5ターン不動失格チェック
     if (s.p1.consecutiveNoProgress >= 5 && s.p2.consecutiveNoProgress >= 5) {
         winner = 'DRAW'; isEnded = true;
     } else if (s.p1.consecutiveNoProgress >= 5) {
@@ -405,7 +395,6 @@ async function executeOnlineTurnLogic(roomId) {
         winner = game.p1; resultType = 'immobilize'; isEnded = true;
     }
 
-    // 2. ゴール達成判定（1000%以上）
     if (!isEnded) {
         if (s.p1.progress >= 1000 && s.p2.progress >= 1000) {
             if (s.p1.progress > s.p2.progress) { winner = game.p1; resultType = 'goal'; }
@@ -419,7 +408,6 @@ async function executeOnlineTurnLogic(roomId) {
         }
     }
 
-    // 決着がついた場合、DBを更新してリザルトを個別に送信
     if (isEnded) {
         setTimeout(async () => {
             if (winner === 'DRAW') {
@@ -429,12 +417,11 @@ async function executeOnlineTurnLogic(roomId) {
                 let winChange = await updatePlayerResult(winner, true, resultType);
                 let loseChange = await updatePlayerResult(loser, false, resultType);
 
-                // レート増減量が個々人で異なるため、個別ソケットに向けて送信する
                 game.p1Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
                 game.p2Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
             }
             delete activeGames[roomId];
-        }, 2600); // 画面上のラウンド結果表示（2500ms）を待ってから発動
+        }, 2600);
     }
 }
 
@@ -453,7 +440,6 @@ setInterval(async () => {
     p1.socket.currentRoomId = roomId;
     p2.socket.currentRoomId = roomId;
 
-    // クラスタの状態の初期設定を格納
     activeGames[roomId] = {
         p1: p1.username,
         p2: p2.username,
@@ -472,16 +458,23 @@ setInterval(async () => {
         }
     };
 
-    // 🌟超重要：フロントエンドへ自分のプレイヤー番号（1番 or 2番）を自覚させる
+    // 🌟 画面側が聞き逃すリスクを完全にゼロにするため、一括送信ではなく個別に役割を同梱して配信する
     p1.socket.emit('assigned_player', 1);
-    p2.socket.emit('assigned_player', 2);
-
-    // スナイプ防御（潜伏状態）のフラグを立てて、クライアントのゲーム画面を起動させる
-    io.to(roomId).emit('match_found', {
+    p1.socket.emit('match_found', {
         roomId: roomId,
+        myRole: 1, // 自分はP1だと強制自覚させる
         p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
         p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
     });
+
+    p2.socket.emit('assigned_player', 2);
+    p2.socket.emit('match_found', {
+        roomId: roomId,
+        myRole: 2, // 自分はP2だと強制自覚させる
+        p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
+        p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
+    });
+
 }, 1000);
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
