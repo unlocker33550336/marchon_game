@@ -12,7 +12,7 @@ const PORT = 3000;
 
 // --- MongoDB接続とスキーマ定義 ---
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => console.log('MongoDB connected successfully'))
   .catch(err => console.error('DB connection error:', err));
 
 const userSchema = new mongoose.Schema({
@@ -99,6 +99,7 @@ io.on('connection', (socket) => {
         if (user) {
             if ((token && user.password === token) || (password && user.password === password)) {
                 currentUsername = username;
+                console.log(`[LOGIN SUCCESS] ${username}`);
                 return socket.emit('login_res', { success: true, username, rate: user.rate, rank: user.rank });
             }
         }
@@ -109,6 +110,7 @@ io.on('connection', (socket) => {
     socket.on('login_guest', () => {
         isGuestUser = true;
         currentUsername = "Guest_" + Math.floor(1000 + Math.random() * 9000);
+        console.log(`[GUEST LOGIN] ${currentUsername}`);
         socket.emit('login_res', { success: true, username: currentUsername, rate: "----", rank: "GUEST", isGuest: true });
     });
 
@@ -133,6 +135,7 @@ io.on('connection', (socket) => {
             rank: userRank,
             socket: socket
         });
+        console.log(`[QUEUE JOIN] ${currentUsername} が待機列に入りました`);
         socket.emit('matchmaking_started');
     });
 
@@ -149,34 +152,48 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 【鉄壁化】イベント発動の予約（ソケットIDで厳格に仕分け）
+    // 【最強修正】イベント発動の予約（ユーザー名で確実に仕分け）
     socket.on('reserve_event', () => {
-        if (socket.currentRoomId) {
-            const game = activeGames[socket.currentRoomId];
-            if (game) {
-                if (socket.id === game.p1Socket.id) game.p1Reserved = true;
-                if (socket.id === game.p2Socket.id) game.p2Reserved = true;
-            }
+        if (!socket.currentRoomId || !currentUsername) return;
+        const game = activeGames[socket.currentRoomId];
+        if (game) {
+            if (currentUsername === game.p1) game.p1Reserved = true;
+            if (currentUsername === game.p2) game.p2Reserved = true;
+            console.log(`[EVENT RESERVED] ${currentUsername} がイベントを予約しました`);
         }
     });
 
-    // 【鉄壁化】配置確定ボタンの受け皿（クライアントの自己申告を無視してソケットIDで100%識別）
+    // 【最強修正】配置確定ボタン（ユーザー名ベースで100%確実に仕分ける）
     socket.on('submit_turn', async (data) => {
-        if (!socket.currentRoomId) return;
+        if (!socket.currentRoomId) {
+            console.log(`[SUBMIT ERROR] ${currentUsername} の部屋IDが見つかりません`);
+            return;
+        }
         const game = activeGames[socket.currentRoomId];
-        if (!game) return;
-
-        const { choice } = data;
-
-        // 誰の回線から届いたデータかでP1/P2を完璧に仕分ける
-        if (socket.id === game.p1Socket.id) {
-            game.p1Choice = choice;
-        } else if (socket.id === game.p2Socket.id) {
-            game.p2Choice = choice;
+        if (!game) {
+            console.log(`[SUBMIT ERROR] 部屋 ${socket.currentRoomId} が存在しません`);
+            return;
         }
 
-        // 両走者の配置が揃ったらターン計算を実行
+        const { choice } = data;
+        console.log(`[TURN SUBMIT] ${currentUsername} から配置データを受信しました`);
+
+        // ソケットIDではなく、ログインしている「ユーザー名」でP1とP2を完全に識別
+        if (currentUsername === game.p1) {
+            game.p1Choice = choice;
+            console.log(`-> P1 (${game.p1}) の配置をロックしました`);
+        } else if (currentUsername === game.p2) {
+            game.p2Choice = choice;
+            console.log(`-> P2 (${game.p2}) の配置をロックしました`);
+        } else {
+            console.log(`[SUBMIT WARNING] 登録外のユーザー名です: ${currentUsername}`);
+        }
+
+        // 両者の配置データがサーバーに揃ったかログで追跡
+        console.log(`[STATUS CHECK] Room: ${socket.currentRoomId} | P1確定: ${!!game.p1Choice} | P2確定: ${!!game.p2Choice}`);
+
         if (game.p1Choice && game.p2Choice) {
+            console.log(`[LOGIC START] 両者の配置が揃いました。ターン計算エンジンを起動します。`);
             await executeOnlineTurnLogic(socket.currentRoomId);
         }
     });
@@ -188,13 +205,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 【鉄壁化】5分制限時間切れによる遅延失格処理
+    // 5分制限時間切れによる遅延失格処理
     socket.on('player_timeout', async () => {
-        if (!socket.currentRoomId) return;
+        if (!socket.currentRoomId || !currentUsername) return;
         const game = activeGames[socket.currentRoomId];
         if (!game) return;
 
-        let isP1 = (socket.id === game.p1Socket.id);
+        let isP1 = (currentUsername === game.p1);
         let foulPlayer = isP1 ? game.p1 : game.p2;
         let winner = isP1 ? game.p2 : game.p1;
 
@@ -288,6 +305,7 @@ async function executeOnlineTurnLogic(roomId) {
     if (p1Choice.self.includes('cheer')) s.p1.cheerCount++; if (p2Choice.target.includes('cheer')) s.p1.cheerCount++;
     if (p2Choice.self.includes('cheer')) s.p2.cheerCount++; if (p1Choice.target.includes('cheer')) s.p2.cheerCount++;
 
+    // P1 スピード演算
     let p1Spd = 5;
     if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp));
     else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7;
@@ -309,6 +327,7 @@ async function executeOnlineTurnLogic(roomId) {
     if (s.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (s.p1.progress >= 800) ? 3 : 2;
     if (s.p1.noWaterCount >= 4) p1Spd -= (0.5 * (s.p1.noWaterCount - 3));
 
+    // P2 スピード演算
     let p2Spd = 5;
     if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp));
     else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7;
@@ -316,7 +335,6 @@ async function executeOnlineTurnLogic(roomId) {
     else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15));
     else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
 
-    if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp));
     if (p2Choice.self.includes('cheer')) p2Spd += 1; if (p1Choice.target.includes('cheer')) p2Spd += 1;
     if (s.p2.cheerCount > 0 && s.p2.cheerCount % 10 === 0) p2Spd += (s.p2.cheerCount * 0.5);
 
@@ -358,6 +376,7 @@ async function executeOnlineTurnLogic(roomId) {
     let p1CanEvent = (game.turn >= 15 && (game.turn - game.lastEventP1 >= 10));
     let p2CanEvent = (game.turn >= 15 && (game.turn - game.lastEventP2 >= 10));
 
+    console.log(`[EMIT ROUND RESULT] 部屋 ${roomId} にターン結果をブロードキャストします`);
     io.to(roomId).emit('round_result', {
         p1ChoiceRaw: p1Choice,
         p2ChoiceRaw: p2Choice,
@@ -409,6 +428,7 @@ async function executeOnlineTurnLogic(roomId) {
     }
 
     if (isEnded) {
+        console.log(`[GAME OVER DETECTED] 勝者: ${winner} | 決着タイプ: ${resultType}`);
         setTimeout(async () => {
             if (winner === 'DRAW') {
                 io.to(roomId).emit('game_over', { winner: 'DRAW', rateChange: 0 });
@@ -418,7 +438,7 @@ async function executeOnlineTurnLogic(roomId) {
                 let loseChange = await updatePlayerResult(loser, false, resultType);
 
                 game.p1Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
-                game.p2Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p2) ? winChange : loseChange });
+                game.p2Socket.emit('game_over', { winner: winner, rateChange: (winner === game.p1) ? winChange : loseChange });
             }
             delete activeGames[roomId];
         }, 2600);
@@ -433,6 +453,7 @@ setInterval(async () => {
     let p2 = waitingQueue.shift();
 
     let roomId = `room_${p1.username}_${p2.username}_${Date.now()}`;
+    console.log(`[MATCH FOUND] ${p1.username} vs ${p2.username} -> 部屋ID: ${roomId}`);
     
     p1.socket.join(roomId);
     p2.socket.join(roomId);
@@ -458,11 +479,10 @@ setInterval(async () => {
         }
     };
 
-    // 🌟 画面側が聞き逃すリスクを完全にゼロにするため、一括送信ではなく個別に役割を同梱して配信する
     p1.socket.emit('assigned_player', 1);
     p1.socket.emit('match_found', {
         roomId: roomId,
-        myRole: 1, // 自分はP1だと強制自覚させる
+        myRole: 1,
         p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
         p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
     });
@@ -470,11 +490,10 @@ setInterval(async () => {
     p2.socket.emit('assigned_player', 2);
     p2.socket.emit('match_found', {
         roomId: roomId,
-        myRole: 2, // 自分はP2だと強制自覚させる
+        myRole: 2,
         p1: { username: p1.username, rate: p1.rate, rank: p1.rank, isHidden: true },
         p2: { username: p2.username, rate: p2.rate, rank: p2.rank, isHidden: true }
     });
-
 }, 1000);
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
