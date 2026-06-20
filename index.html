@@ -3,13 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE MARATHON</title>
+    <title>THE MARATHON - 完全公式レート版</title>
     <style>
+        /* --- 既存の美麗ダークテーマ ＆ 新機能UI用CSSの完全融合 --- */
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 10px; margin: 0; user-select: none; }
         .container { max-width: 600px; margin: 0 auto; padding: 5px; position: relative; }
-        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-size: 22px; }
+        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-size: 22px; text-shadow: 0 0 8px rgba(255,71,87,0.3); }
         
-        /* --- 1000%対応 マラソンコース --- */
+        /* トップ認証・ロビー・管理者用追加スタイル */
+        .auth-panel, .lobby-panel, .admin-panel { background: #1e1e1e; border: 2px solid #333; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 15px; }
+        .auth-input { width: 85%; padding: 10px; margin: 8px 0; border: 1px solid #444; border-radius: 6px; background: #26262b; color: #fff; font-size: 14px; }
+        .auth-input:focus { border-color: #ff4757; outline: none; }
+        
+        /* ランク別バッジカラー */
+        .badge { padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-left: 5px; vertical-align: middle; }
+        .rank-NORMAL { background: #747d8c; color: #fff; }
+        .rank-ELITE { background: #2ed573; color: #fff; box-shadow: 0 0 8px rgba(46,213,115,0.4); }
+        .rank-PREMIUM { background: #1e90ff; color: #fff; box-shadow: 0 0 8px rgba(30,144,255,0.4); }
+        .rank-VIP { background: #ffa500; color: #fff; box-shadow: 0 0 12px rgba(255,165,0,0.6); animation: vipAnm 2s infinite; }
+        .rank-GUEST { background: #a4b0be; color: #2f3542; }
+        @keyframes vipAnm { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
+
+        /* 管理者テーブル */
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #16161a; text-align: left; font-size: 12px; }
+        .admin-table th, .admin-table td { padding: 8px; border: 1px solid #333; }
+        .admin-table th { background: #ff4757; color: white; }
+
+        /* --- マラソンコース --- */
         .marathon-track { background: #222; border: 2px solid #333; border-radius: 12px; margin-bottom: 15px; position: relative; height: 70px; overflow: hidden; }
         .lane { height: 35px; position: relative; display: flex; align-items: center; transition: background-color 0.5s; }
         #lane-p1 { border-bottom: 1px dashed #444; background-color: #2e2e2e; }
@@ -22,11 +42,6 @@
 
         .status-board { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; }
         .timer { font-size: 20px; color: #ffa502; font-weight: bold; font-family: monospace; }
-
-        .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; }
-        .connect-btn { background: #54a0ff; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .ai-btn { background: #10ac84; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
         .game-area { display: none; position: relative; }
         .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.05); z-index: 10; display: none; border-radius: 12px; }
@@ -70,52 +85,101 @@
         
         .official-rule-board { background: #16161a; border: 1px solid #444; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 12px; line-height: 1.6; color: #ccc; }
         .rule-title { font-size: 14px; color: #ffa502; font-weight: bold; margin-bottom: 8px; border-bottom: 1px dashed #444; padding-bottom: 4px; }
+        .hidden { display: none !important; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 <div class="container">
     <div class="nav-bar">
-        <button class="back-btn" id="menu-back-btn" onclick="backToMenu()">↩ モード選択に戻る</button>
+        <button class="back-btn" id="menu-back-btn" onclick="backToMenu()">↩ ロビーに戻る</button>
         <h1>THE MARATHON</h1>
         <div style="width:90px;"></div>
     </div>
     
-    <div class="marathon-track">
-        <div class="goal-line"></div>
-        <div class="lane" id="lane-p1">
-            <span class="lane-label">P1 <span class="debt-badge" id="debt-p1">壁: 0%</span></span>
-            <div class="runner" id="runner-p1">🏃</div>
+    <div id="auth-panel" class="auth-panel">
+        <h2>走者識別認証</h2>
+        <input type="text" id="auth-username" class="auth-input" placeholder="走者識別名（ユーザー名）">
+        <input type="password" id="auth-password" class="auth-input" placeholder="暗号パスワード">
+        <div style="margin-top: 10px;">
+            <button class="action-btn" onclick="login()" style="width: 45%; margin-right: 5%;">ログイン</button>
+            <button class="action-btn" onclick="register()" style="width: 45%; background: #2ed573;">新規登録</button>
         </div>
-        <div class="lane" id="lane-p2">
-            <span class="lane-label">P2 <span class="debt-badge" id="debt-p2">壁: 0%</span></span>
-            <div class="runner" id="runner-p2">🏃</div>
+        <hr style="border: 0.5px solid #333; margin: 15px 0;">
+        <button class="action-btn" onclick="loginGuest()" style="background: #747d8c;">友達に走らせる（ゲストモード）</button>
+    </div>
+
+    <div id="lobby-panel" class="lobby-panel hidden">
+        <h2>極限回廊ロビー</h2>
+        <div style="background: #26262b; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333;">
+            <span style="font-size: 16px;">走者名: <span id="lobby-display-name" style="color:#2ed573; font-weight:bold;"></span></span>
+            <span id="lobby-display-rank" class="badge"></span>
+            <div style="margin-top: 10px; font-size: 18px;">
+                判定レート: <span id="lobby-display-rate" style="color:#ff4757; font-weight:bold;"></span> pt
+            </div>
         </div>
+        <button class="action-btn" id="match-btn" onclick="toggleMatchmaking()" style="padding: 15px; font-size: 18px;">公式レートマッチング開始</button>
+        <button class="action-btn" onclick="startAIModeTrigger()" style="background: #10ac84; margin-top: 10px;">思考AI戦（練習・レート変動なし）</button>
+        <button class="action-btn" onclick="logout()" style="background: #ff6b81; margin-top: 10px; font-size: 12px; padding: 5px;">ログアウト</button>
     </div>
 
-    <div class="status-board">
-        <div>ターン: <span id="turn-count">1</span></div>
-        <div class="timer" id="timer-display">05:00</div>
+    <div id="matching-panel" class="lobby-panel hidden">
+        <div style="width: 30px; height: 30px; border: 4px solid #333; border-top: 4px solid #ff4757; border-radius: 50%; margin: 0 auto 10px; animation: spin 1s linear infinite;"></div>
+        <h3 style="color: #ffa502; margin: 5px 0;">対戦レーン同期中...</h3>
+        <p id="matching-timer" style="font-size: 18px; font-weight: bold; margin: 5px 0;">経過時間: 0秒</p>
+        <p style="font-size: 11px; color: #aaa; margin: 5px 0;">[状況]: <span id="search-phase-text" style="color:#ff6b81; font-weight:bold;">同階層レーティング制限検索中</span></p>
+        <button class="action-btn" onclick="toggleMatchmaking()" style="background: #747d8c; margin-top: 10px; width: 60%;">探索をキャンセル</button>
     </div>
+    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 
-    <div class="connection-panel" id="connection-panel">
-        <h2>対戦モードの選択</h2>
-        <button class="connect-btn" onclick="connectToServer()">🌐 オンライン対戦（2人）</button>
-        <button class="ai-btn" onclick="startAIMode()">🤖 練習相手（AI対戦）</button>
-    </div>
-
-    <div class="waiting-screen" id="waiting-screen">
-        <h2>対戦相手を待っています...</h2>
-        <p id="player-role-text">入室中...</p>
-    </div>
-
-    <div class="event-trigger-section" id="event-panel">
-        <p style="margin:0 0 5px 0; font-size:12px; color:#ffa502;">⚡ 【15ターン経過】イベント実行権が与えられました</p>
-        <button class="event-btn" id="evt-btn" onclick="declareEvent()">このターンにイベントを発動する</button>
+    <div id="admin-panel" class="admin-panel hidden">
+        <h3 style="color: #2ed573; margin: 5px 0;">🛡️ 中央管理者統治パネル</h3>
+        <p style="color: #888; font-size: 11px; margin: 0 0 10px 0;">全登録走者の戦績およびレートJSONデータの監視</p>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>走者名</th>
+                    <th>レート</th>
+                    <th>階層</th>
+                    <th>勝数</th>
+                    <th>敗数</th>
+                    <th>最終遭遇</th>
+                </tr>
+            </thead>
+            <tbody id="admin-table-body"></tbody>
+        </table>
+        <button class="action-btn" onclick="logout()" style="background: #ff4757; margin-top: 15px; width: 50%;">管理者ログアウト</button>
     </div>
 
     <div class="game-area" id="game-area">
         <div class="lock-overlay" id="lock-overlay"></div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; background: #1c1c1e; padding: 5px 10px; border-radius: 6px;">
+            <div>👤 P1: <span id="p1-name-card" style="font-weight:bold; color:#ff4757;">YOU</span> <span id="p1-rate-card" style="color:#aaa;"></span></div>
+            <div>👥 P2: <span id="p2-name-card" style="font-weight:bold; color:#54a0ff;">ENEMY</span> <span id="p2-rate-card" style="color:#aaa;"></span></div>
+        </div>
+
+        <div class="marathon-track">
+            <div class="goal-line"></div>
+            <div class="lane" id="lane-p1">
+                <span class="lane-label">P1 <span class="debt-badge" id="debt-p1">壁: 0%</span></span>
+                <div class="runner" id="runner-p1">🏃</div>
+            </div>
+            <div class="lane" id="lane-p2">
+                <span class="lane-label">P2 <span class="debt-badge" id="debt-p2">壁: 0%</span></span>
+                <div class="runner" id="runner-p2">🏃</div>
+            </div>
+        </div>
+
+        <div class="status-board">
+            <div>ターン: <span id="turn-count">1</span></div>
+            <div class="timer" id="timer-display">05:00</div>
+        </div>
+
+        <div class="event-trigger-section" id="event-panel">
+            <p style="margin:0 0 5px 0; font-size:12px; color:#ffa502;">⚡ 【15ターン経過】イベント実行権が与えられました</p>
+            <button class="event-btn" id="evt-btn" onclick="declareEvent()">このターンにイベントを発動する</button>
+        </div>
 
         <div class="field-board">
             <div class="field-section-title">👤 自分側のフィールド</div>
@@ -146,7 +210,7 @@
     </div>
 
     <div class="bottom-info-panel">
-        <div class="chat-logs" id="chat-logs">【システム】モードを選択してゲームを開始してください。</div>
+        <div class="chat-logs" id="chat-logs">【システム】走者識別認証を完了してください。</div>
         <div class="chat-input-area" id="chat-entry-panel">
             <input type="text" id="chat-input" placeholder="相手を揺さぶる言葉を打て..." onkeydown="if(event.key==='Enter')sendChat()">
             <button class="chat-send-btn" onclick="sendChat()">送信</button>
@@ -159,7 +223,7 @@
         <p>これは、自分と敵（相手）のどちらがゴールできるのかのゲームです。</p>
         <p>クリア条件は先にゴールすることです。5ターン1歩も進めなかったらゲームオーバーです。また、1ターンに5分以上をかけた場合は遅延行為で失格となります。</p>
         <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。安定して進むための試練は全て自分達で用意します。</p>
-        <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
+        <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えてしていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
         <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、毎ターン5分以内にカードをボックスに設置してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
         <p>カードは全部で4種類あり、それぞれ水カード、石カード、太陽カード、応援カードです。水カードはプレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。石カードはプレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落とします。太陽カードはプレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。応援カードはプレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</p>
         <p>初期の気温は5℃です。</p>
@@ -177,6 +241,10 @@
     let localKeep = [];
     let isLocked = false;
     let eventReserved = false;
+    let myUsername = null;
+    let isMatching = false;
+    let matchSeconds = 0;
+    let matchTimerInterval = null;
 
     let aiState = {
         turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
@@ -184,10 +252,16 @@
         p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 }
     };
 
-    // 🌟 ページ読み込み時に自動でバックアップ（セーブ）を確認して復旧を試みる
+    // 🌟 【命綱】起動時に自動でバックアップ（セーブ）を確認して復旧を試みる
     window.onload = function() {
+        const savedUser = localStorage.getItem('marathon_user');
+        const savedToken = localStorage.getItem('marathon_token');
         const savedMode = localStorage.getItem('marathon_mode');
-        if (savedMode === 'ai') {
+
+        if (savedUser && savedToken) {
+            setupSocketConnection();
+            socket.emit('login', { username: savedUser, token: savedToken });
+        } else if (savedMode === 'ai') {
             const savedState = localStorage.getItem('marathon_ai_state');
             const savedKeep = localStorage.getItem('marathon_local_keep');
             if (savedState) {
@@ -195,12 +269,10 @@
                 localKeep = savedKeep ? JSON.parse(savedKeep) : [];
                 isAIMode = true;
                 
-                // 画面要素をプレイ中に引き戻す
-                document.getElementById('connection-panel').style.display = 'none';
+                document.getElementById('auth-panel').style.display = 'none';
                 document.getElementById('game-area').style.display = 'block';
                 document.getElementById('menu-back-btn').disabled = true;
                 
-                // 表示盤面の同期
                 document.getElementById('turn-count').innerText = aiState.turn;
                 document.getElementById('runner-p1').style.left = Math.min((aiState.p1.progress / 10), 85) + "%";
                 document.getElementById('runner-p2').style.left = Math.min((aiState.p2.progress / 10), 85) + "%";
@@ -219,43 +291,123 @@
                 startTimer(300);
                 writeLog("【システム】前回のAI対戦データから自動復帰しました！");
             }
-        } else if (savedMode === 'online') {
-            // オンラインモードだった場合は、サーバーへ「再接続して部屋へ再入場」を要請する
-            connectToServer();
         }
     };
 
-    function connectToServer() {
-        isAIMode = false;
-        // リロード対策として既存のプレイヤー記録枠をサーバーへ名乗れるように保持
-        const savedOnlineRole = localStorage.getItem('marathon_online_role');
-        
+    function setupSocketConnection() {
+        if (socket) return;
         try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
-        document.getElementById('connection-panel').style.display = 'none';
-        
-        // サーバーへ「俺リロードから戻ってきたよ」という申告電波を投げる
-        if(savedOnlineRole) {
-            socket.emit('reconnect_player', { savedRole: parseInt(savedOnlineRole) });
-        }
+
+        // 🌟 自動再接続時のホットログイン回線修復処理
+        socket.on('connect', () => {
+            const savedUser = localStorage.getItem('marathon_user');
+            const savedToken = localStorage.getItem('marathon_token');
+            if (savedUser && savedToken && myUsername) {
+                socket.emit('login', { username: savedUser, token: savedToken });
+            }
+        });
+
+        socket.on('register_res', (res) => { alert(res.msg); });
+
+        socket.on('login_res', (res) => {
+            if (res.success) {
+                myUsername = res.username;
+                if (!res.isGuest && res.username !== 'admin') {
+                    localStorage.setItem('marathon_user', res.username);
+                    const pwdInput = document.getElementById('auth-password').value;
+                    if (pwdInput) localStorage.setItem('marathon_token', pwdInput);
+                }
+
+                document.getElementById('auth-panel').classList.add('hidden');
+                document.getElementById('menu-back-btn').disabled = false;
+
+                if (res.username === 'admin') {
+                    document.getElementById('admin-panel').classList.remove('hidden');
+                    socket.emit('get_admin_data');
+                } else {
+                    document.getElementById('lobby-panel').classList.remove('hidden');
+                    document.getElementById('lobby-display-name').innerText = res.username;
+                    document.getElementById('lobby-display-rate').innerText = res.rate;
+                    const b = document.getElementById('lobby-display-rank');
+                    b.innerText = res.rank; b.className = `badge rank-${res.rank}`;
+                }
+                writeLog(`【システム】走者 [${res.username}] として認証に成功しました。`);
+            } else {
+                alert(res.msg);
+            }
+        });
+
+        socket.on('admin_data_res', (players) => {
+            const tbody = document.getElementById('admin-table-body');
+            tbody.innerHTML = "";
+            for (let name in players) {
+                let p = players[name];
+                let row = `<tr>
+                    <td style="font-weight:bold; color:${name==='admin'?'#2ed573':'#fff'};">${name}</td>
+                    <td style="color:#ff4757; font-weight:bold;">${p.rate}</td>
+                    <td><span class="badge rank-${p.rank}">${p.rank}</span></td>
+                    <td style="color:#2ed573;">${p.win}</td>
+                    <td style="color:#ff6b81;">${p.lose}</td>
+                    <td style="color:#aaa;">${p.lastPlayedWith || 'なし'}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            }
+        });
+
+        socket.on('matchmaking_started', () => {
+            isMatching = true;
+            document.getElementById('lobby-panel').classList.add('hidden');
+            document.getElementById('matching-panel').classList.remove('hidden');
+            matchSeconds = 0;
+            document.getElementById('matching-timer').innerText = `経過時間: 0秒`;
+            document.getElementById('search-phase-text').innerText = "同階層レーティング制限検索中";
+            document.getElementById('search-phase-text').style.color = "#ff4757";
+
+            matchTimerInterval = setInterval(() => {
+                matchSeconds++;
+                document.getElementById('matching-timer').innerText = `経過時間: ${matchSeconds}秒`;
+                if (matchSeconds >= 15 && matchSeconds < 30) {
+                    document.getElementById('search-phase-text').innerText = "周辺階層レーティング緩和検索中";
+                    document.getElementById('search-phase-text').style.color = "#ffa500";
+                } else if (matchSeconds >= 30) {
+                    document.getElementById('search-phase-text').innerText = "全階層無制限マッチング検索中";
+                    document.getElementById('search-phase-text').style.color = "#2ed573";
+                }
+            }, 1000);
+        });
+
+        socket.on('matchmaking_stopped', () => {
+            isMatching = false;
+            clearInterval(matchTimerInterval);
+            document.getElementById('matching-panel').classList.add('hidden');
+            document.getElementById('lobby-panel').classList.remove('hidden');
+        });
+
+        // 🌟 修正：最初から実名とレートをフルオープンで画面に即時反映
+        socket.on('match_found', (data) => {
+            isMatching = false;
+            clearInterval(matchTimerInterval);
+            document.getElementById('matching-panel').classList.add('hidden');
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('menu-back-btn').disabled = true;
+
+            // P1とP2のネームカードに、潜伏テキストではなく本物のユーザー名とレートを即座に叩き込む
+            document.getElementById('p1-name-card').innerText = data.p1.username;
+            document.getElementById('p1-rate-card').innerText = `[${data.p1.rate}pt]`;
+            document.getElementById('p2-name-card').innerText = data.p2.username;
+            document.getElementById('p2-rate-card').innerText = `[${data.p2.rate}pt]`;
+
+            unlockScreen(); setupHandAndBoxes(); startTimer(300);
+        });
 
         socket.on('assigned_player', (num) => {
             myPlayerNumber = num;
             localStorage.setItem('marathon_mode', 'online');
             localStorage.setItem('marathon_online_role', num);
-            document.getElementById('waiting-screen').style.display = 'block';
-            document.getElementById('player-role-text').innerText = `あなたは「プレイヤー ${num}」です。`;
         });
 
-        socket.on('game_start', () => {
-            document.getElementById('waiting-screen').style.display = 'none';
-            document.getElementById('game-area').style.display = 'block';
-            document.getElementById('menu-back-btn').disabled = true;
-            unlockScreen(); setupHandAndBoxes(); startTimer(300);
-        });
-
-        // 🌟 サーバーに保持されていた最新データでリロード画面を安全に完全復元する
         socket.on('restore_online_state', (syncData) => {
-            document.getElementById('waiting-screen').style.display = 'none';
+            document.getElementById('lobby-panel').classList.add('hidden');
             document.getElementById('game-area').style.display = 'block';
             document.getElementById('menu-back-btn').disabled = true;
             myPlayerNumber = syncData.role;
@@ -270,12 +422,9 @@
             updateDebtBadge('debt-p2', syncData.state.p2.debt);
             
             document.getElementById('event-panel').style.display = (myPlayerNumber === 1 ? syncData.p1CanEvent : syncData.p2CanEvent) ? 'block' : 'none';
-            
             localKeep = syncData.currentKeep;
             
-            unlockScreen();
-            setupHandAndBoxes();
-            startTimer(syncData.remainTimer);
+            unlockScreen(); setupHandAndBoxes(); startTimer(syncData.remainTimer);
             writeLog("【システム】通信切断・リロードからオンライン対戦へ自動復帰しました。");
         });
 
@@ -307,9 +456,24 @@
             clearAllBackup();
         });
 
+        socket.on('game_over', (result) => {
+            clearInterval(timerInterval); lockScreen();
+            let msg = (result.winner === myUsername) ? `【大勝利】獲得レート: +${result.rateChange} pt` : `【敗北】喪失レート: -${result.rateChange} pt`;
+            if (result.winner === 'DRAW') msg = "【引き分け】完全同時同点ドローです。";
+            alert(msg); clearAllBackup(); location.reload();
+        });
+
         socket.on('round_result', (data) => {
             let oppChoice = myPlayerNumber === 1 ? data.p2ChoiceRaw : data.p1ChoiceRaw;
             revealOpponentCards(oppChoice);
+
+            // フルオープン化によりここは確認用として最新データを上書き
+            if (data.p1Name && data.p2Name) {
+                document.getElementById('p1-name-card').innerText = data.p1Name;
+                document.getElementById('p1-rate-card').innerText = `[${data.p1Rate}pt]`;
+                document.getElementById('p2-name-card').innerText = data.p2Name;
+                document.getElementById('p2-rate-card').innerText = `[${data.p2Rate}pt]`;
+            }
 
             if(data.activeEvent) {
                 let targetCutinId = (data.eventSender === myPlayerNumber) ? 'cutin-my-field' : 'cutin-opp-field';
@@ -340,13 +504,47 @@
         });
     }
 
-    function startAIMode() {
+    function login() {
+        setupSocketConnection();
+        const u = document.getElementById('auth-username').value.trim();
+        const p = document.getElementById('auth-password').value.trim();
+        if(!u || !p) return alert("名前とパスワードを入力してください");
+        socket.emit('login', { username: u, password: p });
+    }
+
+    function register() {
+        setupSocketConnection();
+        const u = document.getElementById('auth-username').value.trim();
+        const p = document.getElementById('auth-password').value.trim();
+        if(!u || !p) return alert("名前とパスワードを入力してください");
+        socket.emit('register', { username: u, password: p });
+    }
+
+    function loginGuest() {
+        setupSocketConnection();
+        socket.emit('login_guest');
+    }
+
+    function logout() {
+        clearAllBackup();
+        location.reload();
+    }
+
+    function toggleMatchmaking() {
+        if (!isMatching) {
+            socket.emit('join_matchmaking');
+        } else {
+            socket.emit('leave_matchmaking');
+        }
+    }
+
+    function startAIModeTrigger() {
         isAIMode = true; myPlayerNumber = 1;
         localStorage.setItem('marathon_mode', 'ai');
         localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
         localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
         
-        document.getElementById('connection-panel').style.display = 'none';
+        document.getElementById('lobby-panel').classList.add('hidden');
         document.getElementById('game-area').style.display = 'block';
         document.getElementById('menu-back-btn').disabled = true;
         writeLog("【システム】AI対戦（練習モード）開始。目標は1000%！");
@@ -383,6 +581,7 @@
         else { badge.style.display = 'none'; }
     }
 
+    // 🌟 修正：イベント予約時の引数をサーバーの新しい仕分け構造に適合
     function declareEvent() {
         eventReserved = true;
         document.getElementById('evt-btn').disabled = true;
@@ -527,7 +726,6 @@
             setTimeout(() => { executeAILogic(choice); }, 500);
         } else {
             document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
-            // サーバー側リロード救済用：今の残りタイマー時間を添えて送信
             socket.emit('submit_turn', { player: myPlayerNumber, choice: choice, currentTimer: timerSeconds });
         }
     }
@@ -559,10 +757,10 @@
                 let pData = aiState.p1;
                 let maxType = 'cheer'; let maxCount = -1;
                 for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-my-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★あなた：【天の涙】温度が ${maxCount}℃ 下がった！\\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-my-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★あなた：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-my-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★あなた：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-my-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★あなた：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-my-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★あなた：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
+                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-my-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★あなた：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
+                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-my-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★あなた：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
+                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-my-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★あなた：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
                 pData.wastePile[maxType] = 0; aiState.lastEventP1 = aiState.turn; aiState.p1Reserved = false;
             }
 
@@ -570,10 +768,10 @@
                 let pData = aiState.p2;
                 let maxType = 'cheer'; let maxCount = -1;
                 for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-opp-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★AI：【天の涙】温度が ${maxCount}℃ 下がった！\\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-opp-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★AI：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-opp-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★AI：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-opp-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★AI：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-opp-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★AI：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
+                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-opp-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★AI：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
+                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-opp-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★AI：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
+                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-opp-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★AI：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
                 pData.wastePile[maxType] = 0; aiState.lastEventP2 = aiState.turn; aiState.p2Reserved = false;
             }
 
@@ -624,7 +822,7 @@
             s.p1.progress += p1Spd; s.p2.progress += p2Spd;
 
             let resLog = `========================================\n` +
-                         `  【第 ${s.turn} ターン 結果発表】\n` +
+                         `   【第 ${s.turn} ターン 結果発表】\n` +
                          (evText ? evText.replace(/\\n/g, '\n') : "") +
                          `👤 あなた(P1) -> [自分:${p1Choice.self}] [相手:${p1Choice.target}] [進捗:${s.p1.progress}%] [壁:${s.p1.debt}%]\n` +
                          `🤖 AI(P2)     -> [自分:${aiChoice.self}] [相手:${aiChoice.target}] [進捗:${s.p2.progress}%] [壁:${s.p2.debt}%]\n` +
@@ -637,7 +835,6 @@
             updateLaneColor('lane-p1', s.p1.temp); updateLaneColor('lane-p2', s.p2.temp);
             updateDebtBadge('debt-p1', s.p1.debt); updateDebtBadge('debt-p2', s.p2.debt);
 
-            // AIモード最新盤面データのバックアップセーブ
             localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
             localKeep = p1Choice.keep;
             localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
@@ -650,6 +847,13 @@
         }, 2500);
     }
 
+    function sendChat() { 
+        const input = document.getElementById('chat-input'); 
+        if(!input.value.trim() || isAIMode || !socket) return; 
+        socket.emit('send_chat', `${myUsername || 'プレイヤー'}: ${input.value}`); 
+        input.value = ''; 
+    }
+
     function clearAllBackup() {
         localStorage.removeItem('marathon_mode');
         localStorage.removeItem('marathon_ai_state');
@@ -658,7 +862,28 @@
         localStorage.removeItem('marathon_online_role');
     }
 
-    function backToMenu() { clearAllBackup(); window.location.reload(); }
+    function backToMenu() {
+        if(!document.getElementById('game-area').style.display || document.getElementById('game-area').style.display === 'none') {
+            clearAllBackup(); window.location.reload();
+        } else {
+            alert("レース進行中はエスケープロックがかかっています！勝負から逃げることは許されません。");
+        }
+    }
+
+    function logout() {
+        if (socket) {
+            socket.emit('logout_user', { username: myUsername });
+        }
+        clearAllBackup();
+        localStorage.removeItem('marathon_user');
+        localStorage.removeItem('marathon_token');
+        
+        document.getElementById('lobby-panel').classList.add('hidden');
+        document.getElementById('admin-panel').classList.add('hidden');
+        document.getElementById('auth-panel').classList.remove('hidden');
+        
+        location.reload();
+    }
 </script>
 </body>
 </html>
