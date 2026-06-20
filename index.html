@@ -259,7 +259,6 @@
         const savedMode = localStorage.getItem('marathon_mode');
 
         if (savedUser && savedToken) {
-            // トークンが残っていれば自動ログインを要請
             setupSocketConnection();
             socket.emit('login', { username: savedUser, token: savedToken });
         } else if (savedMode === 'ai') {
@@ -298,6 +297,15 @@
     function setupSocketConnection() {
         if (socket) return;
         try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
+
+        // 🌟 自動再接続時のホットログイン回線修復処理
+        socket.on('connect', () => {
+            const savedUser = localStorage.getItem('marathon_user');
+            const savedToken = localStorage.getItem('marathon_token');
+            if (savedUser && savedToken && myUsername) {
+                socket.emit('login', { username: savedUser, token: savedToken });
+            }
+        });
 
         socket.on('register_res', (res) => { alert(res.msg); });
 
@@ -375,7 +383,7 @@
             document.getElementById('lobby-panel').classList.remove('hidden');
         });
 
-        // 🌟 スナイプ対策：最初のターン結果が出るまではP1/P2表示を潜伏させる
+        // 🌟 修正：最初から実名とレートをフルオープンで画面に即時反映
         socket.on('match_found', (data) => {
             isMatching = false;
             clearInterval(matchTimerInterval);
@@ -383,14 +391,11 @@
             document.getElementById('game-area').style.display = 'block';
             document.getElementById('menu-back-btn').disabled = true;
 
-            if (data.p1.isHidden) {
-                document.getElementById('p1-name-card').innerText = "走者選択中...";
-                document.getElementById('p1-rate-card').innerText = "[Rate: ????]";
-            }
-            if (data.p2.isHidden) {
-                document.getElementById('p2-name-card').innerText = "対峙走者潜伏中...";
-                document.getElementById('p2-rate-card').innerText = "[Rate: ????]";
-            }
+            // P1とP2のネームカードに、潜伏テキストではなく本物のユーザー名とレートを即座に叩き込む
+            document.getElementById('p1-name-card').innerText = data.p1.username;
+            document.getElementById('p1-rate-card').innerText = `[${data.p1.rate}pt]`;
+            document.getElementById('p2-name-card').innerText = data.p2.username;
+            document.getElementById('p2-rate-card').innerText = `[${data.p2.rate}pt]`;
 
             unlockScreen(); setupHandAndBoxes(); startTimer(300);
         });
@@ -462,7 +467,7 @@
             let oppChoice = myPlayerNumber === 1 ? data.p2ChoiceRaw : data.p1ChoiceRaw;
             revealOpponentCards(oppChoice);
 
-            // スナイプ解除（1ターン目の計算が降りてきた段階で実名開示）
+            // フルオープン化によりここは確認用として最新データを上書き
             if (data.p1Name && data.p2Name) {
                 document.getElementById('p1-name-card').innerText = data.p1Name;
                 document.getElementById('p1-rate-card').innerText = `[${data.p1Rate}pt]`;
@@ -576,6 +581,7 @@
         else { badge.style.display = 'none'; }
     }
 
+    // 🌟 修正：イベント予約時の引数をサーバーの新しい仕分け構造に適合
     function declareEvent() {
         eventReserved = true;
         document.getElementById('evt-btn').disabled = true;
@@ -751,10 +757,10 @@
                 let pData = aiState.p1;
                 let maxType = 'cheer'; let maxCount = -1;
                 for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-my-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★あなた：【天の涙】温度が ${maxCount}℃ 下がった！\\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-my-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★あなた：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-my-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★あなた：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-my-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★あなた：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-my-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★あなた：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
+                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-my-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★あなた：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
+                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-my-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★あなた：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
+                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-my-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★あなた：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
                 pData.wastePile[maxType] = 0; aiState.lastEventP1 = aiState.turn; aiState.p1Reserved = false;
             }
 
@@ -762,10 +768,10 @@
                 let pData = aiState.p2;
                 let maxType = 'cheer'; let maxCount = -1;
                 for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-opp-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★AI：【天の涙】温度が ${maxCount}℃ 下がった！\\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-opp-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★AI：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-opp-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★AI：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-opp-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★AI：【大応援】 ${maxCount * 4}% 爆速前進！\\n`; }
+                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-opp-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★AI：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
+                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-opp-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★AI：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
+                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-opp-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★AI：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
+                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-opp-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★AI：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
                 pData.wastePile[maxType] = 0; aiState.lastEventP2 = aiState.turn; aiState.p2Reserved = false;
             }
 
@@ -816,7 +822,7 @@
             s.p1.progress += p1Spd; s.p2.progress += p2Spd;
 
             let resLog = `========================================\n` +
-                         `  【第 ${s.turn} ターン 結果発表】\n` +
+                         `   【第 ${s.turn} ターン 結果発表】\n` +
                          (evText ? evText.replace(/\\n/g, '\n') : "") +
                          `👤 あなた(P1) -> [自分:${p1Choice.self}] [相手:${p1Choice.target}] [進捗:${s.p1.progress}%] [壁:${s.p1.debt}%]\n` +
                          `🤖 AI(P2)     -> [自分:${aiChoice.self}] [相手:${aiChoice.target}] [進捗:${s.p2.progress}%] [壁:${s.p2.debt}%]\n` +
@@ -841,7 +847,12 @@
         }, 2500);
     }
 
-    function sendChat() { const input = document.getElementById('chat-input'); if(!input.value.trim() || isAIMode) return; socket.emit('send_chat', `${myUsername || 'プレイヤー'}: ${input.value}`); input.value = ''; }
+    function sendChat() { 
+        const input = document.getElementById('chat-input'); 
+        if(!input.value.trim() || isAIMode || !socket) return; 
+        socket.emit('send_chat', `${myUsername || 'プレイヤー'}: ${input.value}`); 
+        input.value = ''; 
+    }
 
     function clearAllBackup() {
         localStorage.removeItem('marathon_mode');
@@ -863,17 +874,14 @@
         if (socket) {
             socket.emit('logout_user', { username: myUsername });
         }
-        // トークンとセッション情報を徹底的に国境から抹殺
         clearAllBackup();
         localStorage.removeItem('marathon_user');
         localStorage.removeItem('marathon_token');
         
-        // リロードする前に、一旦ロビー画面を強制非表示にして、認証画面を出す
         document.getElementById('lobby-panel').classList.add('hidden');
         document.getElementById('admin-panel').classList.add('hidden');
         document.getElementById('auth-panel').classList.remove('hidden');
         
-        // 最後にトドメのリロード
         location.reload();
     }
 </script>
