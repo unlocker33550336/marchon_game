@@ -3,51 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE MARATHON - Official</title>
+    <title>THE MARATHON</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 10px; margin: 0; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 10px; margin: 0; transition: background 1s; }
         .container { max-width: 600px; margin: 0 auto; padding: 5px; }
-        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; font-size: 24px; }
+        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-size: 22px; }
         
-        .status-board { background: #1e1e1e; padding: 12px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 15px; flex-wrap: wrap; gap: 5px; }
-        .status-board span { font-weight: bold; color: #ff4757; }
+        /* --- マラソンコース（ビジュアル進捗表示エリア） --- */
+        .marathon-track { background: #222; border: 2px solid #333; border-radius: 12px; padding: 15px 10px; margin-bottom: 15px; position: relative; overflow: hidden; height: 60px; }
+        .lane { height: 25px; border-bottom: 1px dashed #444; position: relative; display: flex; align-items: center; }
+        .lane:last-child { border-bottom: none; }
+        .lane-label { font-size: 10px; color: #888; position: absolute; left: 5px; z-index: 2; }
+        .goal-line { position: absolute; right: 20px; top: 0; bottom: 0; width: 4px; background: repeating-linear-gradient(0deg, #fff, #fff 5px, #000 5px, #000 10px); }
+        /* ランナーの見た目（ドット絵風） */
+        .runner { font-size: 20px; position: absolute; left: 0%; transition: left 1s ease-out; transform: translateX(10px); z-index: 3; }
+        
+        .status-board { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; }
         .timer { font-size: 20px; color: #ffa502; font-weight: bold; font-family: monospace; }
         .timer.danger { color: #ff4757; animation: blink 1s infinite; }
 
         .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; }
-        .connect-btn { background: #54a0ff; color: white; padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .ai-btn { background: #10ac84; color: white; padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-
+        .connect-btn { background: #54a0ff; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        .ai-btn { background: #10ac84; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
         .game-area { display: none; }
-        /* スマホ向けに1列、PC向けに2列に自動切り替え */
         .box-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
-        @media (max-width: 480px) {
-            .box-grid { grid-template-columns: 1fr; }
-        }
-        .drop-box { background: #26262b; border: 2px dashed #444; border-radius: 12px; padding: 10px; min-height: 100px; display: flex; flex-direction: column; align-items: center; }
+        @media (max-width: 480px) { .box-grid { grid-template-columns: 1fr; } }
+        
+        .drop-box { background: #26262b; border: 2px dashed #444; border-radius: 12px; padding: 10px; min-height: 100px; display: flex; flex-direction: column; align-items: center; position: relative; }
         .drop-box.hover { background: #323238; border-color: #ff4757; }
         .drop-box .box-cards { display: flex; gap: 8px; justify-content: center; width: 100%; min-height: 80px; margin-top: 5px; flex-wrap: wrap; }
         .section-title { font-size: 12px; color: #aaa; text-transform: uppercase; font-weight: bold; }
+        
+        /* 相手の影が動く演出用のマーク */
+        .opponent-shadow { position: absolute; top: 5px; right: 10px; font-size: 12px; color: #ffa502; background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; display: none; animation: blink 0.5s infinite alternate; }
 
         .hand-section { background: #1c1c1e; padding: 10px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #444; }
         .card-container { display: flex; gap: 10px; justify-content: center; min-height: 85px; align-items: center; flex-wrap: wrap; }
 
-        /* スマホでも押しやすく、はみ出さないサイズ感に調整 */
         .card { width: 65px; height: 85px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; cursor: grab; user-select: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center; font-size: 13px; padding: 3px; box-sizing: border-box; }
         .card[data-type="sun"] { background: linear-gradient(135deg, #ff9f43, #ff5252); }
         .card[data-type="stone"] { background: linear-gradient(135deg, #57606f, #2f3542); }
         .card[data-type="water"] { background: linear-gradient(135deg, #54a0ff, #00d2d3); }
         .card[data-type="cheer"] { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
-
-        .event-section { background: #2f3542; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #ff4757; display: none; text-align: center;}
-        .event-btn { background: #ffa502; color: #000; border: none; padding: 8px 15px; font-weight: bold; border-radius: 4px; cursor: pointer; margin: 5px; font-size: 12px; }
+        /* 伏せカード（相手の画面用） */
+        .card.hidden-card { background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #7f8c8d; color: #7f8c8d; }
 
         .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px; width: 100%; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
-        .log-section { margin-top: 20px; }
-        .log-box { background: #000; padding: 10px; font-family: monospace; border-radius: 8px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: #00ff00; border: 1px solid #222; font-size: 12px; line-height: 1.4; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        /* --- チャット・ルールエリア --- */
+        .tabs { display: flex; gap: 5px; margin-top: 15px; }
+        .tab-btn { background: #26262b; color: #aaa; border: none; padding: 8px 15px; font-size: 12px; border-radius: 6px 6px 0 0; cursor: pointer; }
+        .tab-btn.active { background: #1e1e1e; color: #fff; border-top: 2px solid #ff4757; }
+        .tab-content { background: #1e1e1e; border: 1px solid #333; padding: 12px; border-radius: 0 6px 6px 6px; min-height: 120px; font-size: 13px; }
+        
+        .chat-input-area { display: flex; gap: 5px; margin-top: 8px; }
+        .chat-input-area input { flex: 1; padding: 8px; background: #26262b; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 12px; }
+        .chat-send-btn { background: #54a0ff; color: #fff; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .chat-logs { max-height: 100px; overflow-y: auto; font-family: monospace; color: #4cd137; white-space: pre-wrap; line-height: 1.4; }
+
+        @keyframes blink { 0% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -55,12 +71,19 @@
 <div class="container">
     <h1>THE MARATHON</h1>
     
+    <!-- マラソンコース（数字パーセンテージを排除！） -->
+    <div class="marathon-track" id="track-bg">
+        <div class="goal-line"></div>
+        <div class="lane"><span class="lane-label">P1</span><div class="runner" id="runner-p1">🏃</div></div>
+        <div class="lane"><span class="lane-label">P2</span><div class="runner" id="runner-p2">🏃</div></div>
+    </div>
+
     <div class="status-board">
         <div>ターン: <span id="turn-count">1</span></div>
-        <div>P1: <span id="p1-progress">0.00</span>% | P2: <span id="p2-progress">0.00</span>%</div>
         <div class="timer" id="timer-display">05:00</div>
     </div>
 
+    <!-- 接続パネル -->
     <div class="connection-panel" id="connection-panel">
         <h2>対戦モードの選択</h2>
         <button class="connect-btn" onclick="connectToServer()">🌐 オンライン対戦（2人）</button>
@@ -72,12 +95,13 @@
         <p id="player-role-text">入室中...</p>
     </div>
 
+    <!-- メインゲーム -->
     <div class="game-area" id="game-area">
         <div class="box-grid">
-            <div class="drop-box"><div class="section-title">📥 自分用</div><div class="box-cards" id="zone-self"></div></div>
-            <div class="drop-box"><div class="section-title">📤 相手用</div><div class="box-cards" id="zone-target"></div></div>
-            <div class="drop-box"><div class="section-title">🗑️ 廃棄</div><div class="box-cards" id="zone-waste"></div></div>
-            <div class="drop-box"><div class="section-title">📦 保留</div><div class="box-cards" id="zone-keep"></div></div>
+            <div class="drop-box" id="box-self"><div class="section-title">📥 自分用</div><div class="box-cards" id="zone-self"></div></div>
+            <div class="drop-box" id="box-target"><div class="section-title">📤 相手用</div><div class="box-cards" id="zone-target"></div></div>
+            <div class="drop-box" id="box-waste"><div class="section-title">🗑️ 廃棄</div><div class="box-cards" id="zone-waste"></div></div>
+            <div class="drop-box" id="box-keep"><div class="section-title">📦 保留</div><div class="box-cards" id="zone-keep"></div><div class="opponent-shadow" id="shadow-keep">相手が保留中</div></div>
         </div>
 
         <div class="hand-section">
@@ -88,9 +112,31 @@
         <button class="action-btn" id="submit-btn" onclick="submitOnlineTurn()">配置を確定する</button>
     </div>
 
-    <div class="log-section">
-        <div class="section-title">📜 結果発表ログ</div>
-        <div class="log-box" id="log">モードを選択してゲームを開始してください。</div>
+    <!-- 複合情報エリア（タブ切り替え） -->
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-rule-btn" onclick="switchTab('rule')">📜 ルール説明</button>
+        <button class="tab-btn" id="tab-chat-btn" onclick="switchTab('chat')">💬 チャットルーム</button>
+    </div>
+    <div class="tab-content">
+        <!-- 確定した公式ルール説明文 -->
+        <div id="content-rule">
+            <p><strong>これは、自分と敵（相手）のどちらがゴールできるのかのゲームです。</strong></p>
+            <p>クリア条件は先にゴールすることです。5ターン1歩も進めなかったらゲームオーバーです。また、1ターンに5分以上をかけた場合は遅延行為で失格となります。</p>
+            <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。そして、その試練は全て自分達で用意します。</p>
+            <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えてしていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
+            <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、毎ターン5分以内にカードをボックスに設置してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
+            <p>カードは全部で4種類あり、それぞれ水カード、石カード、太陽カード、応援カードです。水カードはプレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。石カードはプレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落します。太陽カードはプレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。応援カードはプレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</p>
+            <p>初期の気温は5℃です。</p>
+            <p><strong>&lt;イベント&gt;</strong><br>各プレイヤーは開始から15ターン経過するとイベントを実行する権利が与えられます。イベントを実行したプレイヤーは、実行したターンから10ターン後にイベントを実行する権利が再び与えられます。</p>
+        </div>
+        <!-- 自由テキストチャット -->
+        <div id="content-chat" style="display:none;">
+            <div class="chat-logs" id="chat-logs">【システム】チャットへようこそ。心理戦を仕掛けましょう。</div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="メッセージを入力..." onkeydown="if(event.key==='Enter')sendChat()">
+                <button class="chat-send-btn" onclick="sendChat()">送信</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -101,23 +147,15 @@
     let timerInterval = null;
     let timerSeconds = 300;
     let localKeep = [];
+    
+    // 見えない内部数値（画面には一切出さない）
+    let currentP1Progress = 0;
+    let currentP2Progress = 0;
+    let currentGlobalTemp = 5; 
 
-    // --- AI対戦用の簡易内部ステータス ---
-    let aiState = {
-        turn: 1,
-        p1: { progress: 0, keep: [] },
-        p2: { progress: 0, keep: [] } // AI
-    };
-
-    // 1. オンライン対戦接続
     function connectToServer() {
         isAIMode = false;
-        try {
-            socket = io();
-        } catch(e) {
-            alert("サーバー通信ライブラリの読み込みに失敗しました。AIモードをお試しください。");
-            return;
-        }
+        try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
 
         document.getElementById('connection-panel').style.display = 'none';
         document.getElementById('waiting-screen').style.display = 'block';
@@ -130,41 +168,123 @@
         socket.on('game_start', () => {
             document.getElementById('waiting-screen').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
-            localKeep = [];
             setupHandAndBoxes();
-            startTimer(300); // 5分リセットスタート
+            startTimer(300);
+        });
+
+        // 🌟【最重要】相手のドラッグ操作をリアルタイムに受信して影を表示！
+        socket.on('opponent_moving_card', (data) => {
+            // 相手が保留ボックスにカードを置いているかリアルタイムに視覚化
+            const shadow = document.getElementById('shadow-keep');
+            if(data.targetZone === 'keep') {
+                shadow.style.display = 'block';
+            } else {
+                shadow.style.display = 'none';
+            }
+        });
+
+        // チャット受信
+        socket.on('receive_chat', (msg) => {
+            const logs = document.getElementById('chat-logs');
+            logs.innerHTML += `\n${msg}`;
+            logs.scrollTop = logs.scrollHeight;
         });
 
         socket.on('round_result', (data) => {
-            document.getElementById('p1-progress').innerText = data.p1Progress.toFixed(2);
-            document.getElementById('p2-progress').innerText = data.p2Progress.toFixed(2);
+            // 内部数値を更新
+            currentP1Progress = data.p1Progress;
+            currentP2Progress = data.p2Progress;
+            currentGlobalTemp = data.currentTemp; // 太陽カードによる温度
+
             document.getElementById('turn-count').innerText = data.nextTurn;
-            
-            const logBox = document.getElementById('log');
-            if(data.nextTurn === 2) logBox.innerHTML = "";
-            logBox.innerHTML = data.resultLog + logBox.innerHTML;
+
+            // 1. ランナーの位置をビジュアルで同期（%数値をそのままleftの％に適用）
+            // 最大85%（ゴールラインの手前）で表現
+            document.getElementById('runner-p1').style.left = Math.min(currentP1Progress, 85) + "%";
+            document.getElementById('runner-p2').style.left = Math.min(currentP2Progress, 85) + "%";
+
+            // 2. 太陽カードによる温度の環境変化演出（背景色をジワジワ赤くする）
+            let redValue = Math.min(18 + (currentGlobalTemp * 10), 120); // 温度が上がるほど赤みが深まる
+            document.getElementById('track-bg').style.backgroundColor = `rgb(${redValue}, 34, 34)`;
 
             localKeep = data.keeps[myPlayerNumber === 1 ? 'p1' : 'p2'];
             setupHandAndBoxes();
-            startTimer(300); // ターン交代時は5分にリセット
+            startTimer(300);
             document.getElementById('submit-btn').disabled = false;
             document.getElementById('submit-btn').innerText = "配置を確定する";
+            document.getElementById('shadow-keep').style.display = 'none';
         });
     }
 
-    // 2. AI対戦モードの開始
     function startAIMode() {
         isAIMode = true;
         myPlayerNumber = 1;
         document.getElementById('connection-panel').style.display = 'none';
         document.getElementById('game-area').style.display = 'block';
-        document.getElementById('log').innerHTML = "AI対戦（練習モード）が開始されました。\\n";
-        localKeep = [];
         setupHandAndBoxes();
         startTimer(300);
     }
 
-    // 3. タイマー制御（引数で秒数を指定できるように変更。ミス時のリセットを防ぐ）
+    // カードを動かすたびに、相手の画面へ「今どこにカードを置いたか」をリアルタイム通知する仕掛け
+    function notifyCardMove(targetZoneId) {
+        if(!isAIMode && socket) {
+            socket.emit('player_move_card', { player: myPlayerNumber, targetZone: targetZoneId.replace('zone-', '') });
+        }
+    }
+
+    function setupHandAndBoxes() {
+        const handZone = document.getElementById('zone-hand');
+        const keepZone = document.getElementById('zone-keep');
+        document.getElementById('zone-self').innerHTML = '';
+        document.getElementById('zone-target').innerHTML = '';
+        document.getElementById('zone-waste').innerHTML = '';
+        keepZone.innerHTML = '';
+        handZone.innerHTML = '';
+
+        document.getElementById('hand-title').innerText = `プレイヤー ${myPlayerNumber} の手札`;
+
+        const types = ['sun', 'stone', 'water', 'cheer'];
+        const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
+
+        types.forEach(type => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.draggable = true;
+            card.dataset.type = type;
+            card.id = `card-${type}`;
+            card.innerText = labels[type];
+            
+            if (localKeep.includes(type)) {
+                keepZone.appendChild(card);
+            } else {
+                handZone.appendChild(card);
+            }
+        });
+
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', e.target.id));
+            card.onclick = () => {
+                const zones = ['zone-hand', 'zone-self', 'zone-target', 'zone-waste', 'zone-keep'];
+                let nextIdx = (zones.indexOf(card.parentElement.id) + 1) % zones.length;
+                document.getElementById(zones[nextIdx]).appendChild(card);
+                notifyCardMove(zones[nextIdx]);
+            };
+        });
+    }
+
+    document.querySelectorAll('.box-cards, #zone-hand').forEach(zone => {
+        zone.addEventListener('dragover', (e) => e.preventDefault());
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text/plain');
+            const dragged = document.getElementById(id);
+            if (dragged) {
+                zone.appendChild(dragged);
+                notifyCardMove(zone.id);
+            }
+        });
+    });
+
     function startTimer(seconds) {
         clearInterval(timerInterval);
         timerSeconds = seconds;
@@ -182,78 +302,11 @@
     function updateTimerDisplay() {
         const min = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
         const sec = String(timerSeconds % 60).padStart(2, '0');
-        const el = document.getElementById('timer-display');
-        el.innerText = `${min}:${sec}`;
-        if (timerSeconds <= 30) el.classList.add('danger');
-        else el.classList.remove('danger');
+        document.getElementById('timer-display').innerText = `${min}:${sec}`;
     }
 
-    // 4. 手札生成とドラッグ設定
-    function setupHandAndBoxes() {
-        const handZone = document.getElementById('zone-hand');
-        const keepZone = document.getElementById('zone-keep');
-        document.getElementById('zone-self').innerHTML = '';
-        document.getElementById('zone-target').innerHTML = '';
-        document.getElementById('zone-waste').innerHTML = '';
-        keepZone.innerHTML = '';
-        handZone.innerHTML = '';
-
-        document.getElementById('hand-title').innerText = `プレイヤー ${myPlayerNumber} の手札`;
-
-        const allTypes = ['sun', 'stone', 'water', 'cheer'];
-        const typeLabels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
-
-        allTypes.forEach(type => {
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.draggable = true;
-            card.dataset.type = type;
-            card.id = `card-${type}`;
-            card.innerText = typeLabels[type];
-            
-            if (localKeep.includes(type)) {
-                keepZone.appendChild(card);
-            } else {
-                handZone.appendChild(card);
-            }
-        });
-
-        document.querySelectorAll('.card').forEach(card => {
-            // パソコン用のドラッグ
-            card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', e.target.id));
-            // スマホ用の簡易タップ移動（スマホでの操作性を格段にアップ）
-            card.onclick = () => {
-                const currentZone = card.parentElement.id;
-                if(currentZone === 'zone-hand') {
-                    document.getElementById('zone-self').appendChild(card);
-                } else if(currentZone === 'zone-self') {
-                    document.getElementById('zone-target').appendChild(card);
-                } else if(currentZone === 'zone-target') {
-                    document.getElementById('zone-waste').appendChild(card);
-                } else if(currentZone === 'zone-waste') {
-                    document.getElementById('zone-keep').appendChild(card);
-                } else {
-                    document.getElementById('zone-hand').appendChild(card);
-                }
-            };
-        });
-    }
-
-    document.querySelectorAll('.box-cards, #zone-hand').forEach(zone => {
-        zone.addEventListener('dragover', (e) => e.preventDefault());
-        zone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const id = e.dataTransfer.getData('text/plain');
-            const dragged = document.getElementById(id);
-            if (dragged) zone.appendChild(dragged);
-        });
-    });
-
-    // 5. 確定ボタン送信
     function submitOnlineTurn() {
-        // タイマーを止める（ただし秒数は保持しておく）
         clearInterval(timerInterval);
-
         const getCards = (id) => Array.from(document.getElementById(id).children).map(c => c.dataset.type);
         const choice = {
             self: getCards('zone-self'),
@@ -263,68 +316,44 @@
             hand: getCards('zone-hand')
         };
 
-        // 【修正】全部置けていない時は、残っていた秒数（timerSeconds）を引き継いでタイマー再開！
         if (choice.hand.length > 0) {
-            alert("手札に残っているカードがあります！保留にする場合は保留ボックスへ。");
+            alert("手札に残っているカードがあります！");
             startTimer(timerSeconds); 
             return;
         }
 
         if (isAIMode) {
-            calculateAITurn(choice);
+            // AI戦のダミー処理（進捗はランナーが動くことで目測確認）
+            currentP1Progress += 5;
+            currentP2Progress += 4;
+            document.getElementById('runner-p1').style.left = currentP1Progress + "%";
+            document.getElementById('runner-p2').style.left = currentP2Progress + "%";
+            startTimer(300);
+            setupHandAndBoxes();
         } else {
             document.getElementById('submit-btn').disabled = true;
-            document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
+            document.getElementById('submit-btn').innerText = "相手を待っています...";
             socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
         }
     }
 
-    // 6. AI対戦時の疑似計算ロジック（練習用）
-    function calculateAITurn(p1Choice) {
-        // AI（プレイヤー2）のランダムな配置を生成
-        const types = ['sun', 'stone', 'water', 'cheer'];
-        // 前回の保留があれば除外してシャッフル
-        const available = types.filter(t => !aiState.p2.keep.includes(t));
-        // ランダムに各ボックスへ1枚ずつ割り振り
-        let aiChoice = { self: [], target: [], waste: [], keep: [] };
-        
-        // 簡易的に1枚ずつ割り振る
-        if(available.length > 0) aiChoice.self.push(available[0] || 'cheer');
-        if(available.length > 1) aiChoice.target.push(available[1] || 'stone');
-        if(available.length > 2) aiChoice.waste.push(available[2] || 'water');
-        // 残りは確率で保留に
-        if(available.length > 3) {
-            if(Math.random() > 0.5) aiChoice.keep.push(available[3]);
-            else aiChoice.waste.push(available[3]);
+    function sendChat() {
+        const input = document.getElementById('chat-input');
+        if(!input.value.trim()) return;
+        if(socket) {
+            socket.emit('send_chat', `プレイヤー ${myPlayerNumber}: ${input.value}`);
+        } else {
+            const logs = document.getElementById('chat-logs');
+            logs.innerHTML += `\nあなた(練習中): ${input.value}`;
         }
+        input.value = '';
+    }
 
-        // 簡易スピード計算（通常は5%ずつ進む）
-        let p1Spd = 5; if(p1Choice.self.includes('cheer')) p1Spd += 2; if(aiChoice.target.includes('stone')) p1Spd -= 2;
-        let p2Spd = 5; if(aiChoice.self.includes('cheer')) p2Spd += 2; if(p1Choice.target.includes('stone')) p2Spd -= 2;
-
-        aiState.p1.progress += p1Spd;
-        aiState.p2.progress += p2Spd;
-        aiState.p2.keep = aiChoice.keep;
-
-        // 画面更新
-        document.getElementById('p1-progress').innerText = aiState.p1.progress.toFixed(2);
-        document.getElementById('p2-progress').innerText = aiState.p2.progress.toFixed(2);
-        
-        const logBox = document.getElementById('log');
-        const aiLog = `===【第 ${aiState.turn} ターン (AI戦) 結果】===\n` +
-                      `■ プレイヤー1 (あなた): [自分:${p1Choice.self}] [相手:${p1Choice.target}] [廃棄:${p1Choice.waste}] [保留:${p1Choice.keep}]\n` +
-                      `■ プレイヤー2 (AI)    : [自分:${aiChoice.self}] [相手:${aiChoice.target}] [廃棄:${aiChoice.waste}] [保留:${aiChoice.keep}]\n` +
-                      `  ⇒ 達成度: P1 ${aiState.p1.progress.toFixed(2)}% | P2 ${aiState.p2.progress.toFixed(2)}%\n` +
-                      `======================================\n\n`;
-        logBox.innerHTML = aiLog + logBox.innerHTML;
-
-        aiState.turn++;
-        document.getElementById('turn-count').innerText = aiState.turn;
-
-        // 次のターンへ
-        localKeep = p1Choice.keep;
-        setupHandAndBoxes();
-        startTimer(300);
+    function switchTab(tab) {
+        document.getElementById('content-rule').style.display = tab === 'rule' ? 'block' : 'none';
+        document.getElementById('content-chat').style.display = tab === 'chat' ? 'block' : 'none';
+        document.getElementById('tab-rule-btn').className = tab === 'rule' ? 'tab-btn active' : 'tab-btn';
+        document.getElementById('tab-chat-btn').className = tab === 'chat' ? 'tab-btn active' : 'tab-btn';
     }
 </script>
 </body>
