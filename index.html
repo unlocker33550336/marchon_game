@@ -24,7 +24,10 @@
         .ai-btn { background: #10ac84; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
-        .game-area { display: none; }
+        .game-area { display: none; position: relative; }
+        /* 確定後に画面全体を覆って操作できなくする透明な壁 */
+        .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.1); z-index: 10; display: none; border-radius: 12px; }
+
         .box-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
         @media (max-width: 480px) { .box-grid { grid-template-columns: 1fr; } }
         
@@ -33,7 +36,6 @@
         .drop-box .box-cards { display: flex; gap: 8px; justify-content: center; width: 100%; min-height: 80px; margin-top: 5px; flex-wrap: wrap; }
         .section-title { font-size: 12px; color: #aaa; text-transform: uppercase; font-weight: bold; }
         
-        /* 相手が今どこをいじってるかパタパタ動く、リアルタイムの残像エフェクト */
         .opponent-ghost { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 10px; border: 2px solid #ffa502; background: rgba(255, 165, 0, 0.15); display: none; pointer-events: none; justify-content: center; align-items: center; font-size: 11px; color: #ffa502; font-weight: bold; z-index: 5; }
 
         .hand-section { background: #1c1c1e; padding: 10px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #444; }
@@ -86,6 +88,8 @@
     </div>
 
     <div class="game-area" id="game-area">
+        <div class="lock-overlay" id="lock-overlay"></div>
+
         <div class="box-grid">
             <div class="drop-box" id="box-self"><div class="section-title">📥 自分用</div><div class="box-cards" id="zone-self"></div><div class="opponent-ghost" id="ghost-self">相手が配置中...</div></div>
             <div class="drop-box" id="box-target"><div class="section-title">📤 相手用</div><div class="box-cards" id="zone-target"></div><div class="opponent-ghost" id="ghost-target">相手が配置中...</div></div>
@@ -133,13 +137,12 @@
     let timerInterval = null;
     let timerSeconds = 300;
     let localKeep = [];
+    let isLocked = false; // 確定状態フラグ
 
-    // ページを読み込んだ瞬間、記憶（localStorage）があれば復元する【リロード対策】
     window.onload = () => {
         const savedRole = localStorage.getItem('marathon_role');
         if (savedRole) {
             myPlayerNumber = parseInt(savedRole);
-            // 記憶があったら自動でサーバーに再接続を試みる
             connectToServer();
         }
     };
@@ -153,26 +156,22 @@
 
         socket.on('assigned_player', (num) => {
             myPlayerNumber = num;
-            localStorage.setItem('marathon_role', num); // 役職をブラウザに記憶
-            document.getElementById('player-role-text').innerText = `あなたは「プレイヤー ${num}」として復元/登録されました。`;
+            localStorage.setItem('marathon_role', num);
+            document.getElementById('player-role-text').innerText = `あなたは「プレイヤー ${num}」です。`;
         });
 
         socket.on('game_start', () => {
             document.getElementById('waiting-screen').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
+            unlockScreen(); // ロック解除
             setupHandAndBoxes();
             startTimer(300);
         });
 
-        // 🌟【バグ修正】相手のリアルタイムカード移動（パタパタ残像）を100%正確に同期
         socket.on('opponent_moving_card', (data) => {
-            // 全てのボックスの残像を一旦消す
             document.querySelectorAll('.opponent-ghost').forEach(g => g.style.display = 'none');
-            
-            // 相手がどこかのボックスの上にカードをホバー、または配置したらそこを光らせる
             if (data.targetZone && data.targetZone !== 'hand') {
-                const ghostId = `ghost-${data.targetZone}`;
-                const ghostEl = document.getElementById(ghostId);
+                const ghostEl = document.getElementById(`ghost-${data.targetZone}`);
                 if (ghostEl) ghostEl.style.display = 'flex';
             }
         });
@@ -183,31 +182,44 @@
             logs.scrollTop = logs.scrollHeight;
         });
 
+        // 🌟 サーバーから無事に結果を受信！
         socket.on('round_result', (data) => {
             document.getElementById('turn-count').innerText = data.nextTurn;
 
-            // ランナーの独立同期
+            // ランナー位置更新
             document.getElementById('runner-p1').style.left = Math.min(data.p1Progress, 85) + "%";
             document.getElementById('runner-p2').style.left = Math.min(data.p2Progress, 85) + "%";
 
-            // 🌟自分の温度だけに基づいて背景の色を変化させる（混同バグの修正）
+            // 背景色更新
             let myTemp = myPlayerNumber === 1 ? data.p1Temp : data.p2Temp;
             let redValue = Math.min(18 + (myTemp * 12), 140);
             document.getElementById('track-bg').style.backgroundColor = `rgb(${redValue}, 34, 34)`;
 
             localKeep = data.keeps[myPlayerNumber === 1 ? 'p1' : 'p2'];
+            
+            unlockScreen(); // 🌟 次のターンのために画面ロックを完全解除！
             setupHandAndBoxes();
             startTimer(300);
-            
-            // 残像エフェクトをリセット
-            document.querySelectorAll('.opponent-ghost').forEach(g => g.style.display = 'none');
-            document.getElementById('submit-btn').disabled = false;
-            document.getElementById('submit-btn').innerText = "配置を確定する";
         });
     }
 
-    // カードをボックスにセットした瞬間に電波を飛ばす関数
+    function lockScreen() {
+        isLocked = true;
+        document.getElementById('lock-overlay').style.display = 'block';
+        document.getElementById('submit-btn').disabled = true;
+        document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
+    }
+
+    function unlockScreen() {
+        isLocked = false;
+        document.getElementById('lock-overlay').style.display = 'none';
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('submit-btn').innerText = "配置を確定する";
+        document.querySelectorAll('.opponent-ghost').forEach(g => g.style.display = 'none');
+    }
+
     function notifyCardMove(parentElementId) {
+        if(isLocked) return; // 🌟 ロック中は相手への通知も送らない
         if(!isAIMode && socket && parentElementId) {
             let zoneName = parentElementId.replace('zone-', '').replace('box-', '');
             socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName });
@@ -244,12 +256,12 @@
         });
 
         document.querySelectorAll('.card').forEach(card => {
-            // パソコンのドラッグ開始時
             card.addEventListener('dragstart', (e) => {
+                if(isLocked) { e.preventDefault(); return; } // ロック中はドラッグ禁止
                 e.dataTransfer.setData('text/plain', e.target.id);
             });
-            // スマホのタップ移動時
             card.onclick = () => {
+                if(isLocked) return; // 🌟 確定後はタップ移動も完全無効化！
                 const zones = ['zone-hand', 'zone-self', 'zone-target', 'zone-waste', 'zone-keep'];
                 let nextIdx = (zones.indexOf(card.parentElement.id) + 1) % zones.length;
                 const nextZoneEl = document.getElementById(zones[nextIdx]);
@@ -259,16 +271,15 @@
         });
     }
 
-    // ドラッグ＆ドロップの受け皿設定
     document.querySelectorAll('.box-cards, #zone-hand').forEach(zone => {
         zone.addEventListener('dragover', (e) => e.preventDefault());
         zone.addEventListener('drop', (e) => {
             e.preventDefault();
+            if(isLocked) return; // ロック中はドロップ拒否
             const id = e.dataTransfer.getData('text/plain');
             const dragged = document.getElementById(id);
             if (dragged) {
                 zone.appendChild(dragged);
-                // ドロップされた親ボックスのIDを通知に回す
                 notifyCardMove(zone.id || zone.parentElement.id);
             }
         });
@@ -295,6 +306,7 @@
     }
 
     function submitOnlineTurn() {
+        if(isLocked) return;
         clearInterval(timerInterval);
         const getCards = (id) => Array.from(document.getElementById(id).children).map(c => c.dataset.type);
         const choice = {
@@ -311,16 +323,8 @@
             return;
         }
 
-        if (isAIMode) {
-            alert("AIモードはデモ用の動作です。本番はオンライン対戦を選択してください。");
-            startTimer(300);
-            setupHandAndBoxes();
-        } else {
-            document.getElementById('submit-btn').disabled = true;
-            document.getElementById('submit-btn').innerText = "相手を待っています...";
-            // サーバーへ最終確定データを送信
-            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
-        }
+        lockScreen(); // 🌟 画面を完全にロック状態にする
+        socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
     }
 
     function sendChat() {
@@ -339,7 +343,7 @@
         document.getElementById('tab-chat-btn').className = tab === 'chat' ? 'tab-btn active' : 'tab-btn';
     }
     
-    function startAIMode() { isAIMode = true; document.getElementById('connection-panel').style.display = 'none'; document.getElementById('game-area').style.display = 'block'; setupHandAndBoxes(); startTimer(300); }
+    function startAIMode() { alert("オンラインモードでプレイしてください"); }
 </script>
 </body>
 </html>
