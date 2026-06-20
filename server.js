@@ -28,29 +28,45 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
+// ランク判定用共通関数
+function getRank(rate) {
+  if (rate >= 20000) return "VIP";
+  else if (rate >= 15000) return "PREMIUM";
+  else if (rate >= 5000) return "ELITE";
+  else return "NORMAL";
+}
+
+// 負けた時のペナルティ計算（君のノートのオリジナル設計）
+function getLosePenalty(rank) {
+  if (rank === "VIP") return 250;
+  if (rank === "PREMIUM") return 180;
+  if (rank === "ELITE") return 100;
+  return 30; // NORMAL
+}
+
 // --- レート変動ロジック (ここを試合終了時に呼ぶ) ---
 async function updatePlayerResult(username, isWin, resultType) {
   const user = await User.findOne({ username });
   if (!user || username === 'admin') return;
 
-  let change = 0;
   if (isWin) {
-    if (resultType === 'goal') change = 200;
+    let change = 0;
+    if (resultType === 'goal') change = 300;
     else if (resultType === 'immobilize') change = 150;
-    else change = 100;
+    else change = 50;
+    
     user.win += 1;
+    user.rate = user.rate + change;
   } else {
-    change = -50;
+    // 君の設計したランク別ペナルティ関数をここで正確に適用
+    let penalty = getLosePenalty(user.rank);
+    
     user.lose += 1;
+    user.rate = Math.max(0, user.rate - penalty);
   }
 
-  user.rate = Math.max(0, user.rate + change);
-  
   // ランク再判定
-  if (user.rate >= 2000) user.rank = "VIP";
-  else if (user.rate >= 1500) user.rank = "PREMIUM";
-  else if (user.rate >= 500) user.rank = "ELITE";
-  else user.rank = "NORMAL";
+  user.rank = getRank(user.rate);
 
   await user.save();
 }
@@ -94,6 +110,7 @@ io.on('connection', (socket) => {
                 if (user && currentUsername !== 'admin') {
                     user.rate = Math.max(0, user.rate - 200);
                     user.lose += 1;
+                    user.rank = getRank(user.rate); // ランクの再判定を同期
                     await user.save();
                 }
                 delete reconnectTimers[currentUsername];
