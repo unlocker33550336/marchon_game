@@ -180,7 +180,6 @@
         socket.on('game_start', () => { document.getElementById('waiting-screen').style.display = 'none'; document.getElementById('game-area').style.display = 'block'; document.getElementById('menu-back-btn').disabled = true; unlockScreen(); setupHandAndBoxes(); startTimer(300); });
 
         socket.on('opponent_moving_card', (data) => {
-            // 動いているシルエットの「？」だけを綺麗にお片付け
             document.querySelectorAll('.opponent-row .mystery-card').forEach(c => c.remove());
             if (data.targetZone && data.targetZone !== 'hand') {
                 const targetSlot = document.getElementById(`slot-opp-${data.targetZone}`);
@@ -216,7 +215,7 @@
                 eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
 
                 unlockScreen(); 
-                setupHandAndBoxes(); // 🌟 重複IDバグを根絶したカード生成
+                setupHandAndBoxes(); 
                 startTimer(300);
             }, 2500); 
         });
@@ -264,28 +263,32 @@
     function notifyCardMove(slotId) { if(isLocked || isAIMode || !socket) return; let zoneName = slotId.replace('slot-my-', ''); socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName }); }
     function canAddToKeep(cardId, targetSlotId) { if (targetSlotId !== 'slot-my-keep') return true; const keepSlot = document.getElementById('slot-my-keep'); const hasCard = Array.from(keepSlot.children).some(el => el.classList.contains('card')); if (hasCard) { alert("保留枠には最大1枚しか置けません！"); return false; } return true; }
 
-    // 🌟【バグ完全消滅化】重複IDエラーを防ぐためにランダムなIDを付与する仕組みに修正
+    // 🌟【消失原因のバグを完全根絶】条件分岐を廃止し、4種類カードを手札か保留へ確実に毎回同時生成
     function setupHandAndBoxes() {
         const handZone = document.getElementById('zone-hand');
         
-        // 自分枠の中身を完全にまっさらにリセット
+        // フィールドと手札枠をお片付け
         document.querySelectorAll('#my-field-row .card-slot').forEach(slot => { const label = slot.querySelector('.slot-label'); slot.innerHTML = ''; if(label) slot.appendChild(label); });
         document.querySelectorAll('.opponent-row .opened-opp-card').forEach(c => c.remove());
         handZone.innerHTML = '';
 
-        const types = ['sun', 'stone', 'water', 'cheer']; const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
+        const types = ['sun', 'stone', 'water', 'cheer']; 
+        const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
         
         types.forEach(type => {
             const card = document.createElement('div'); 
             card.className = 'card'; 
             card.draggable = true; 
             card.dataset.type = type; 
-            // 🌟 ここが最大の修正：毎ターン完全に新しい固有のID(card-sun-XXXX等)を割り振って重複を回避！
             card.id = `card-${type}-${Math.floor(Math.random() * 100000)}`; 
             card.innerText = labels[type];
             
-            if (localKeep.includes(type)) { document.getElementById('slot-my-keep').appendChild(card); } 
-            else { handZone.appendChild(card); }
+            // 🌟 修正点：片方しか作らないバグを消し、保留にある種類なら保留枠へ、それ以外なら100%確実に手札枠へ生成する
+            if (localKeep.includes(type)) { 
+                document.getElementById('slot-my-keep').appendChild(card); 
+            } else { 
+                handZone.appendChild(card); 
+            }
         });
 
         document.querySelectorAll('.card').forEach(card => {
