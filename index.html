@@ -180,7 +180,7 @@
         socket.on('game_start', () => { document.getElementById('waiting-screen').style.display = 'none'; document.getElementById('game-area').style.display = 'block'; document.getElementById('menu-back-btn').disabled = true; unlockScreen(); setupHandAndBoxes(); startTimer(300); });
 
         socket.on('opponent_moving_card', (data) => {
-            // 🌟【バグ修正】動いている最中の「？」シルエットだけを狙い撃ちしてリセット
+            // 動いているシルエットの「？」だけを綺麗にお片付け
             document.querySelectorAll('.opponent-row .mystery-card').forEach(c => c.remove());
             if (data.targetZone && data.targetZone !== 'hand') {
                 const targetSlot = document.getElementById(`slot-opp-${data.targetZone}`);
@@ -216,7 +216,7 @@
                 eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
 
                 unlockScreen(); 
-                setupHandAndBoxes(); // 🌟 ここでカードが綺麗に配り直される
+                setupHandAndBoxes(); // 🌟 重複IDバグを根絶したカード生成
                 startTimer(300);
             }, 2500); 
         });
@@ -225,7 +225,6 @@
     function startAIMode() { isAIMode = true; myPlayerNumber = 1; document.getElementById('connection-panel').style.display = 'none'; document.getElementById('game-area').style.display = 'block'; document.getElementById('menu-back-btn').disabled = true; writeLog("【システム】AI対戦開始。目標は1000%！"); unlockScreen(); setupHandAndBoxes(); startTimer(300); }
 
     function revealOpponentCards(oppChoice) {
-        // 🌟【バグ修正】答え合わせの時だけ、相手のフィールド枠の中身をクリアして入れ替える
         document.querySelectorAll('.opponent-row .card, .opponent-row .mystery-card').forEach(c => c.remove());
         const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
         for (let key in oppChoice) {
@@ -265,20 +264,28 @@
     function notifyCardMove(slotId) { if(isLocked || isAIMode || !socket) return; let zoneName = slotId.replace('slot-my-', ''); socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName }); }
     function canAddToKeep(cardId, targetSlotId) { if (targetSlotId !== 'slot-my-keep') return true; const keepSlot = document.getElementById('slot-my-keep'); const hasCard = Array.from(keepSlot.children).some(el => el.classList.contains('card')); if (hasCard) { alert("保留枠には最大1枚しか置けません！"); return false; } return true; }
 
+    // 🌟【バグ完全消滅化】重複IDエラーを防ぐためにランダムなIDを付与する仕組みに修正
     function setupHandAndBoxes() {
         const handZone = document.getElementById('zone-hand');
         
-        // 自分側のハメ込み枠のカードデータだけをお片付け（大元のカード素材は消さない！）
+        // 自分枠の中身を完全にまっさらにリセット
         document.querySelectorAll('#my-field-row .card-slot').forEach(slot => { const label = slot.querySelector('.slot-label'); slot.innerHTML = ''; if(label) slot.appendChild(label); });
-        
-        // 相手が開示したカード表示だけをお片付け
         document.querySelectorAll('.opponent-row .opened-opp-card').forEach(c => c.remove());
         handZone.innerHTML = '';
 
         const types = ['sun', 'stone', 'water', 'cheer']; const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
+        
         types.forEach(type => {
-            const card = document.createElement('div'); card.className = 'card'; card.draggable = true; card.dataset.type = type; card.id = `card-${type}`; card.innerText = labels[type];
-            if (localKeep.includes(type)) { document.getElementById('slot-my-keep').appendChild(card); } else { handZone.appendChild(card); }
+            const card = document.createElement('div'); 
+            card.className = 'card'; 
+            card.draggable = true; 
+            card.dataset.type = type; 
+            // 🌟 ここが最大の修正：毎ターン完全に新しい固有のID(card-sun-XXXX等)を割り振って重複を回避！
+            card.id = `card-${type}-${Math.floor(Math.random() * 100000)}`; 
+            card.innerText = labels[type];
+            
+            if (localKeep.includes(type)) { document.getElementById('slot-my-keep').appendChild(card); } 
+            else { handZone.appendChild(card); }
         });
 
         document.querySelectorAll('.card').forEach(card => {
@@ -396,7 +403,7 @@
 
             localKeep = p1Choice.keep; eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
             unlockScreen(); 
-            setupHandAndBoxes(); // 🌟 次のターンの準備へ安全にバトンタッチ
+            setupHandAndBoxes(); 
             startTimer(300);
         }, 2500);
     }
