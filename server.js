@@ -1,4 +1,4 @@
-// server.js (ノーカット・不動敗北・陣地エフェクト完全中継版)
+// server.js (ノーカット・リロード自動復帰・5ターン不動敗北監視版)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -8,9 +8,13 @@ const path = require('path');
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 app.use(express.static(__dirname));
 
+// 部屋情報。再接続（リロード）を検知するために既存のソケットID履歴も追跡
 let rooms = {
-    p1: null, p2: null, choices: { p1: null, p2: null },
+    p1: null, p2: null, 
+    p1OldId: null, p2OldId: null, // リロード前の古い通信IDの退避枠
+    choices: { p1: null, p2: null },
     eventsReserved: { p1: false, p2: false }, lastEventTurn: { p1: -99, p2: -99 },
+    remainTimerSeconds: 300, // 現在のターンの残り秒数をサーバーでも常時記憶
     state: {
         turn: 1,
         p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
@@ -19,8 +23,39 @@ let rooms = {
 };
 
 io.on('connection', (socket) => {
+    // 新規入室処理
     if (!rooms.p1) { rooms.p1 = socket.id; socket.emit('assigned_player', 1); }
-    else if (!rooms.p2) { rooms.p2 = socket.id; socket.emit('assigned_player', 2); io.emit('game_start'); }
+    else if (!rooms.p2) { rooms.p2 = socket.id; socket.emit('assigned_player', 2); io.emit('game_start'); rooms.remainTimerSeconds = 300; }
+
+    // 🌟 【新機能】プレイヤーから「リロードして戻ってきたよ！」という電波を受信した場合の救済処理
+    socket.on('reconnect_player', (data) => {
+        if (data.savedRole === 1) {
+            rooms.p1 = socket.id; // 新しい通信IDにバインド
+            if (rooms.choices.p1 || rooms.choices.p2) {
+                // すでにゲームが始まっていれば、現在の全状態を同期送信してゲーム画面に強制復帰させる
+                socket.emit('restore_online_state', {
+                    state: rooms.state, role: 1, remainTimer: rooms.remainTimerSeconds,
+                    currentKeep: rooms.choices.p1 ? rooms.choices.p1.keep : [],
+                    p1CanEvent: (rooms.state.turn >= 15 && (rooms.state.turn - rooms.lastEventTurn.p1 >= 10)),
+                    p2CanEvent: (rooms.state.turn >= 15 && (rooms.state.turn - rooms.lastEventTurn.p2 >= 10))
+                });
+            } else {
+                socket.emit('assigned_player', 1);
+            }
+        } else if (data.savedRole === 2) {
+            rooms.p2 = socket.id; // 新しい通信IDにバインド
+            if (rooms.choices.p1 || rooms.choices.p2 || rooms.state.turn > 1) {
+                socket.emit('restore_online_state', {
+                    state: rooms.state, role: 2, remainTimer: rooms.remainTimerSeconds,
+                    currentKeep: rooms.choices.p2 ? rooms.choices.p2.keep : [],
+                    p1CanEvent: (rooms.state.turn >= 15 && (rooms.state.turn - rooms.lastEventTurn.p1 >= 10)),
+                    p2CanEvent: (rooms.state.turn >= 15 && (rooms.state.turn - rooms.lastEventTurn.p2 >= 10))
+                });
+            } else {
+                socket.emit('assigned_player', 2);
+            }
+        }
+    });
 
     socket.on('player_move_card', (data) => { socket.broadcast.emit('opponent_moving_card', { player: data.player, targetZone: data.targetZone }); });
     socket.on('send_chat', (msg) => { io.emit('receive_chat', msg); });
@@ -30,6 +65,9 @@ io.on('connection', (socket) => {
     socket.on('submit_turn', (data) => {
         if (data.player === 1) rooms.choices.p1 = data.choice;
         if (data.player === 2) rooms.choices.p2 = data.choice;
+        
+        // サーバー側で残りタイマーの同期基準値を更正
+        if (data.currentTimer < rooms.remainTimerSeconds) { rooms.remainTimerSeconds = data.currentTimer; }
 
         if (rooms.choices.p1 && rooms.choices.p2) {
             let rawP1 = JSON.parse(JSON.stringify(rooms.choices.p1));
@@ -40,18 +78,46 @@ io.on('connection', (socket) => {
             nextResult.p1ChoiceRaw = rawP1;
             nextResult.p2ChoiceRaw = rawP2;
 
+            // 5ターン連続不動でのゲームオーバー終了判定チェック
+            if (rooms.state.p1.consecutiveNoProgress >= 5 || rooms.state.p2.consecutiveNoProgress >= 5) {
+                let loser = rooms.state.p1.consecutiveNoProgress >= 5 ? 1 : 2;
+                io.emit('game_over_timeout', { foulPlayer: loser });
+                resetRoomWhole();
+                return;
+            }
+
             if(rooms.state.p1.progress >= 1000 || rooms.state.p2.progress >= 1000) {
                 let winner = rooms.state.p1.progress >= rooms.state.p2.progress ? 1 : 2;
-                io.emit('game_clear', { winner: winner }); return;
+                io.emit('game_clear', { winner: winner }); 
+                resetRoomWhole();
+                return;
             }
 
             io.emit('round_result', nextResult);
             rooms.choices.p1 = null; rooms.choices.p2 = null;
+            rooms.remainTimerSeconds = 300; // 次のターン用にタイマーを完全回復
         }
     });
 
-    socket.on('disconnect', () => { if (socket.id === rooms.p1) rooms.p1 = null; if (socket.id === rooms.p2) rooms.p2 = null; });
+    socket.on('disconnect', () => {
+        // リロードされた瞬間に部屋を即解散せず、OldIdに避難させて復帰チャンスを与える
+        if (socket.id === rooms.p1) { rooms.p1OldId = rooms.p1; rooms.p1 = null; }
+        if (socket.id === rooms.p2) { rooms.p2OldId = rooms.p2; rooms.p2 = null; }
+    });
 });
+
+function resetRoomWhole() {
+    rooms.p1 = null; rooms.p2 = null; rooms.p1OldId = null; rooms.p2OldId = null;
+    rooms.choices.p1 = null; rooms.choices.p2 = null;
+    rooms.eventsReserved.p1 = false; rooms.eventsReserved.p2 = false;
+    rooms.lastEventTurn.p1 = -99; rooms.lastEventTurn.p2 = -99;
+    rooms.remainTimerSeconds = 300;
+    rooms.state = {
+        turn: 1,
+        p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
+        p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 }
+    };
+}
 
 function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     c1.waste.forEach(t => state.p1.wastePile[t]++);
@@ -118,7 +184,6 @@ function calculateOfficialLogic(c1, c2, state, evReserved, lastEv) {
     if(p2Spd < 0) { state.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
     else if(state.p2.debt > 0) { if(p2Spd >= state.p2.debt) { p2Spd -= state.p2.debt; state.p2.debt = 0; } else { state.p2.debt -= p2Spd; p2Spd = 0; } }
 
-    // 🌟 公式ルール「5ターン1歩も進めなかったらゲームオーバー」を完全中継
     state.p1.consecutiveNoProgress = (p1Spd === 0) ? state.p1.consecutiveNoProgress + 1 : 0;
     state.p2.consecutiveNoProgress = (p2Spd === 0) ? state.p2.consecutiveNoProgress + 1 : 0;
 
