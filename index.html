@@ -2,81 +2,82 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>THE MARATHON - Online Versus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE MARATHON - Official</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; margin: 0; }
-        .container { max-width: 900px; margin: 0 auto; padding: 10px; }
-        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 10px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 5px; }
+        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; font-size: 24px; }
         
-        .status-board { background: #1e1e1e; padding: 15px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 18px; margin-bottom: 25px; }
+        .status-board { background: #1e1e1e; padding: 12px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 15px; flex-wrap: wrap; gap: 5px; }
         .status-board span { font-weight: bold; color: #ff4757; }
-        .timer { font-size: 24px; color: #ffa502; font-weight: bold; font-family: monospace; }
+        .timer { font-size: 20px; color: #ffa502; font-weight: bold; font-family: monospace; }
         .timer.danger { color: #ff4757; animation: blink 1s infinite; }
 
-        .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 25px; }
-        .connection-panel input { padding: 10px; font-size: 16px; border-radius: 4px; border: none; width: 60%; margin-bottom: 10px; }
-        .connect-btn { background: #54a0ff; color: white; padding: 10px 20px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .connection-panel { background: #2f3542; border: 2px solid #54a0ff; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; }
+        .connect-btn { background: #54a0ff; color: white; padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        .ai-btn { background: #10ac84; color: white; padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
 
-        .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 25px; display: none; }
+        .waiting-screen { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; display: none; }
 
         .game-area { display: none; }
-        .box-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px; }
-        .drop-box { background: #26262b; border: 2px dashed #444; border-radius: 12px; padding: 15px; min-height: 140px; display: flex; flex-direction: column; align-items: center; }
+        /* スマホ向けに1列、PC向けに2列に自動切り替え */
+        .box-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
+        @media (max-width: 480px) {
+            .box-grid { grid-template-columns: 1fr; }
+        }
+        .drop-box { background: #26262b; border: 2px dashed #444; border-radius: 12px; padding: 10px; min-height: 100px; display: flex; flex-direction: column; align-items: center; }
         .drop-box.hover { background: #323238; border-color: #ff4757; }
-        .drop-box .box-cards { display: flex; gap: 10px; justify-content: center; width: 100%; min-height: 110px; margin-top: 10px; flex-wrap: wrap; }
-        .section-title { font-size: 14px; color: #aaa; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
+        .drop-box .box-cards { display: flex; gap: 8px; justify-content: center; width: 100%; min-height: 80px; margin-top: 5px; flex-wrap: wrap; }
+        .section-title { font-size: 12px; color: #aaa; text-transform: uppercase; font-weight: bold; }
 
-        .hand-section { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 25px; border: 1px dashed #444; }
-        .card-container { display: flex; gap: 15px; justify-content: center; min-height: 110px; align-items: center; }
+        .hand-section { background: #1c1c1e; padding: 10px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #444; }
+        .card-container { display: flex; gap: 10px; justify-content: center; min-height: 85px; align-items: center; flex-wrap: wrap; }
 
-        .card { width: 80px; height: 110px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; cursor: grab; user-select: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center; font-size: 14px; padding: 5px; box-sizing: border-box; }
+        /* スマホでも押しやすく、はみ出さないサイズ感に調整 */
+        .card { width: 65px; height: 85px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; cursor: grab; user-select: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center; font-size: 13px; padding: 3px; box-sizing: border-box; }
         .card[data-type="sun"] { background: linear-gradient(135deg, #ff9f43, #ff5252); }
         .card[data-type="stone"] { background: linear-gradient(135deg, #57606f, #2f3542); }
         .card[data-type="water"] { background: linear-gradient(135deg, #54a0ff, #00d2d3); }
         .card[data-type="cheer"] { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
 
-        .event-section { background: #2f3542; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #ff4757; display: none; text-align: center;}
-        .event-btn { background: #ffa502; color: #000; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .event-section { background: #2f3542; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #ff4757; display: none; text-align: center;}
+        .event-btn { background: #ffa502; color: #000; border: none; padding: 8px 15px; font-weight: bold; border-radius: 4px; cursor: pointer; margin: 5px; font-size: 12px; }
 
-        .action-btn { background: #ff4757; color: #fff; border: none; padding: 15px; width: 100%; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
-        .log-section { margin-top: 30px; }
-        .log-box { background: #000; padding: 15px; font-family: monospace; border-radius: 8px; max-height: 450px; overflow-y: auto; white-space: pre-wrap; color: #00ff00; border: 1px solid #222; font-size: 14px; line-height: 1.5; }
+        .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px; width: 100%; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
+        .log-section { margin-top: 20px; }
+        .log-box { background: #000; padding: 10px; font-family: monospace; border-radius: 8px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: #00ff00; border: 1px solid #222; font-size: 12px; line-height: 1.4; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     </style>
-    <!-- オンライン通信用ライブラリ(Socket.io)の読み込み -->
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 <div class="container">
-    <h1>THE MARATHON (ONLINE)</h1>
+    <h1>THE MARATHON</h1>
     
     <div class="status-board">
         <div>ターン: <span id="turn-count">1</span></div>
-        <div>P1の達成度: <span id="p1-progress">0.00</span>% | P2の達成度: <span id="p2-progress">0.00</span>%</div>
+        <div>P1: <span id="p1-progress">0.00</span>% | P2: <span id="p2-progress">0.00</span>%</div>
         <div class="timer" id="timer-display">05:00</div>
     </div>
 
-    <!-- 接続パネル -->
     <div class="connection-panel" id="connection-panel">
-        <h2>オンライン対戦サーバーへの接続</h2>
-        <p>サーバーURLを入力して接続してください（ローカルテスト時は空欄でOK）</p>
-        <input type="text" id="server-url" placeholder="http://localhost:3000"><br>
-        <button class="connect-btn" onclick="connectToServer()">サーバーに接続して参戦</button>
+        <h2>対戦モードの選択</h2>
+        <button class="connect-btn" onclick="connectToServer()">🌐 オンライン対戦（2人）</button>
+        <button class="ai-btn" onclick="startAIMode()">🤖 練習相手（AI対戦）</button>
     </div>
 
-    <!-- 待機画面 -->
     <div class="waiting-screen" id="waiting-screen">
         <h2>対戦相手を待っています...</h2>
-        <p id="player-role-text">サーバーに接続されました。もう一人のプレイヤーが入室するまでお待ちください。</p>
+        <p id="player-role-text">入室中...</p>
     </div>
 
-    <!-- メインゲームエリア -->
     <div class="game-area" id="game-area">
         <div class="box-grid">
-            <div class="drop-box"><div class="section-title">📥 自分用ボックス</div><div class="box-cards" id="zone-self"></div></div>
-            <div class="drop-box"><div class="section-title">📤 相手用ボックス</div><div class="box-cards" id="zone-target"></div></div>
-            <div class="drop-box"><div class="section-title">🗑️ 廃棄ボックス</div><div class="box-cards" id="zone-waste"></div></div>
-            <div class="drop-box"><div class="section-title">📦 保留ボックス</div><div class="box-cards" id="zone-keep"></div></div>
+            <div class="drop-box"><div class="section-title">📥 自分用</div><div class="box-cards" id="zone-self"></div></div>
+            <div class="drop-box"><div class="section-title">📤 相手用</div><div class="box-cards" id="zone-target"></div></div>
+            <div class="drop-box"><div class="section-title">🗑️ 廃棄</div><div class="box-cards" id="zone-waste"></div></div>
+            <div class="drop-box"><div class="section-title">📦 保留</div><div class="box-cards" id="zone-keep"></div></div>
         </div>
 
         <div class="hand-section">
@@ -84,83 +85,110 @@
             <div class="card-container" id="zone-hand"></div>
         </div>
 
-        <!-- イベント発動パネル -->
-        <div class="event-section" id="event-panel">
-            <div class="section-title" style="color:#ffa502;">⚠️ イベント発動可能（1度使うと5ターンCT）</div>
-            <p>廃棄ボックスの最も多いカードのイベントを発動しますか？</p>
-            <button class="event-btn" id="evt-p1-btn" onclick="requestEvent(1)" style="display:none;">プレイヤー1のイベントを発動</button>
-            <button class="event-btn" id="evt-p2-btn" onclick="requestEvent(2)" style="display:none;">プレイヤー2のイベントを発動</button>
-        </div>
-
-        <button class="action-btn" id="submit-btn" style="margin-top:15px;" onclick="submitOnlineTurn()">配置を確定して相手を待つ</button>
+        <button class="action-btn" id="submit-btn" onclick="submitOnlineTurn()">配置を確定する</button>
     </div>
 
     <div class="log-section">
         <div class="section-title">📜 結果発表ログ</div>
-        <div class="log-box" id="log">サーバーに接続してゲームを開始してください。</div>
+        <div class="log-box" id="log">モードを選択してゲームを開始してください。</div>
     </div>
 </div>
 
 <script>
     let socket = null;
-    let myPlayerNumber = null; // 1 or 2
-    let gameActive = false;
+    let myPlayerNumber = 1; 
+    let isAIMode = false;
     let timerInterval = null;
     let timerSeconds = 300;
+    let localKeep = [];
 
-    let localKeep = []; // 自分の保留カードの記録用
+    // --- AI対戦用の簡易内部ステータス ---
+    let aiState = {
+        turn: 1,
+        p1: { progress: 0, keep: [] },
+        p2: { progress: 0, keep: [] } // AI
+    };
 
+    // 1. オンライン対戦接続
     function connectToServer() {
-        const url = document.getElementById('server-url').value || window.location.origin;
-        
-        // 本番環境では一例としてSocket接続処理を走らせる
+        isAIMode = false;
         try {
-            socket = io(url);
+            socket = io();
         } catch(e) {
-            alert("通信サーバーの準備ができていないため、現在はモック（疑似接続）モードで動作します。");
-            setupMockOnline();
+            alert("サーバー通信ライブラリの読み込みに失敗しました。AIモードをお試しください。");
             return;
         }
 
-        socket.on('connect', () => {
-            document.getElementById('connection-panel').style.display = 'none';
-            document.getElementById('waiting-screen').style.display = 'block';
-        });
+        document.getElementById('connection-panel').style.display = 'none';
+        document.getElementById('waiting-screen').style.display = 'block';
 
         socket.on('assigned_player', (num) => {
             myPlayerNumber = num;
-            document.getElementById('player-role-text').innerText = `ナイス！あなたは「プレイヤー ${num}」として登録されました。相手の接続を待ちます。`;
+            document.getElementById('player-role-text').innerText = `あなたは「プレイヤー ${num}」です。相手を待っています。`;
         });
 
         socket.on('game_start', () => {
             document.getElementById('waiting-screen').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
-            gameActive = true;
+            localKeep = [];
             setupHandAndBoxes();
-            startTimer();
+            startTimer(300); // 5分リセットスタート
         });
 
         socket.on('round_result', (data) => {
-            // サーバーから計算結果を受信して画面を書き換える
             document.getElementById('p1-progress').innerText = data.p1Progress.toFixed(2);
             document.getElementById('p2-progress').innerText = data.p2Progress.toFixed(2);
             document.getElementById('turn-count').innerText = data.nextTurn;
             
-            // ログの追加
             const logBox = document.getElementById('log');
             if(data.nextTurn === 2) logBox.innerHTML = "";
             logBox.innerHTML = data.resultLog + logBox.innerHTML;
 
-            // 次のターンの手札生成
             localKeep = data.keeps[myPlayerNumber === 1 ? 'p1' : 'p2'];
             setupHandAndBoxes();
-            startTimer();
+            startTimer(300); // ターン交代時は5分にリセット
             document.getElementById('submit-btn').disabled = false;
-            document.getElementById('submit-btn').innerText = "配置を確定して相手を待つ";
+            document.getElementById('submit-btn').innerText = "配置を確定する";
         });
     }
 
-    // --- 以降のUI操作・ドラッグ＆ドロップは既存を踏襲 ---
+    // 2. AI対戦モードの開始
+    function startAIMode() {
+        isAIMode = true;
+        myPlayerNumber = 1;
+        document.getElementById('connection-panel').style.display = 'none';
+        document.getElementById('game-area').style.display = 'block';
+        document.getElementById('log').innerHTML = "AI対戦（練習モード）が開始されました。\\n";
+        localKeep = [];
+        setupHandAndBoxes();
+        startTimer(300);
+    }
+
+    // 3. タイマー制御（引数で秒数を指定できるように変更。ミス時のリセットを防ぐ）
+    function startTimer(seconds) {
+        clearInterval(timerInterval);
+        timerSeconds = seconds;
+        updateTimerDisplay();
+        timerInterval = setInterval(() => {
+            timerSeconds--;
+            updateTimerDisplay();
+            if (timerSeconds <= 0) {
+                clearInterval(timerInterval);
+                submitOnlineTurn();
+            }
+        }, 1000);
+    }
+
+    function updateTimerDisplay() {
+        const min = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+        const sec = String(timerSeconds % 60).padStart(2, '0');
+        const el = document.getElementById('timer-display');
+        el.innerText = `${min}:${sec}`;
+        if (timerSeconds <= 30) el.classList.add('danger');
+        else el.classList.remove('danger');
+    }
+
+    // 4. 手札生成とドラッグ設定
     function setupHandAndBoxes() {
         const handZone = document.getElementById('zone-hand');
         const keepZone = document.getElementById('zone-keep');
@@ -180,7 +208,7 @@
             card.className = 'card';
             card.draggable = true;
             card.dataset.type = type;
-            card.id = `online-card-${type}`;
+            card.id = `card-${type}`;
             card.innerText = typeLabels[type];
             
             if (localKeep.includes(type)) {
@@ -191,7 +219,23 @@
         });
 
         document.querySelectorAll('.card').forEach(card => {
+            // パソコン用のドラッグ
             card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', e.target.id));
+            // スマホ用の簡易タップ移動（スマホでの操作性を格段にアップ）
+            card.onclick = () => {
+                const currentZone = card.parentElement.id;
+                if(currentZone === 'zone-hand') {
+                    document.getElementById('zone-self').appendChild(card);
+                } else if(currentZone === 'zone-self') {
+                    document.getElementById('zone-target').appendChild(card);
+                } else if(currentZone === 'zone-target') {
+                    document.getElementById('zone-waste').appendChild(card);
+                } else if(currentZone === 'zone-waste') {
+                    document.getElementById('zone-keep').appendChild(card);
+                } else {
+                    document.getElementById('zone-hand').appendChild(card);
+                }
+            };
         });
     }
 
@@ -205,29 +249,11 @@
         });
     });
 
-    function startTimer() {
-        clearInterval(timerInterval);
-        timerSeconds = 300;
-        updateTimerDisplay();
-        timerInterval = setInterval(() => {
-            timerSeconds--;
-            updateTimerDisplay();
-            if (timerSeconds <= 0) {
-                clearInterval(timerInterval);
-                submitOnlineTurn();
-            }
-        }, 1000);
-    }
-
-    function updateTimerDisplay() {
-        const min = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
-        const sec = String(timerSeconds % 60).padStart(2, '0');
-        const el = document.getElementById('timer-display');
-        el.innerText = `${min}:${sec}`;
-    }
-
+    // 5. 確定ボタン送信
     function submitOnlineTurn() {
+        // タイマーを止める（ただし秒数は保持しておく）
         clearInterval(timerInterval);
+
         const getCards = (id) => Array.from(document.getElementById(id).children).map(c => c.dataset.type);
         const choice = {
             self: getCards('zone-self'),
@@ -237,33 +263,68 @@
             hand: getCards('zone-hand')
         };
 
+        // 【修正】全部置けていない時は、残っていた秒数（timerSeconds）を引き継いでタイマー再開！
         if (choice.hand.length > 0) {
-            alert("手札に残っているカードがあります！");
-            startTimer();
+            alert("手札に残っているカードがあります！保留にする場合は保留ボックスへ。");
+            startTimer(timerSeconds); 
             return;
         }
 
-        document.getElementById('submit-btn').disabled = true;
-        document.getElementById('submit-btn').innerText = "対戦相手の入力を待っています...";
-
-        if(socket) {
-            // サーバーへ自分の選択した配置データを送信！
-            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
+        if (isAIMode) {
+            calculateAITurn(choice);
         } else {
-            alert("（疑似モード）両プレイヤーのデータとして仮処理します。");
-            // 本番サーバーがないとき用のデモ用処理
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
+            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
         }
     }
 
-    // サーバーがまだ立ち上がっていないとき用のシミュレーター設定
-    function setupMockOnline() {
-        document.getElementById('connection-panel').style.display = 'none';
-        document.getElementById('game-area').style.display = 'block';
-        myPlayerNumber = 1;
-        localKeep = [];
+    // 6. AI対戦時の疑似計算ロジック（練習用）
+    function calculateAITurn(p1Choice) {
+        // AI（プレイヤー2）のランダムな配置を生成
+        const types = ['sun', 'stone', 'water', 'cheer'];
+        // 前回の保留があれば除外してシャッフル
+        const available = types.filter(t => !aiState.p2.keep.includes(t));
+        // ランダムに各ボックスへ1枚ずつ割り振り
+        let aiChoice = { self: [], target: [], waste: [], keep: [] };
+        
+        // 簡易的に1枚ずつ割り振る
+        if(available.length > 0) aiChoice.self.push(available[0] || 'cheer');
+        if(available.length > 1) aiChoice.target.push(available[1] || 'stone');
+        if(available.length > 2) aiChoice.waste.push(available[2] || 'water');
+        // 残りは確率で保留に
+        if(available.length > 3) {
+            if(Math.random() > 0.5) aiChoice.keep.push(available[3]);
+            else aiChoice.waste.push(available[3]);
+        }
+
+        // 簡易スピード計算（通常は5%ずつ進む）
+        let p1Spd = 5; if(p1Choice.self.includes('cheer')) p1Spd += 2; if(aiChoice.target.includes('stone')) p1Spd -= 2;
+        let p2Spd = 5; if(aiChoice.self.includes('cheer')) p2Spd += 2; if(p1Choice.target.includes('stone')) p2Spd -= 2;
+
+        aiState.p1.progress += p1Spd;
+        aiState.p2.progress += p2Spd;
+        aiState.p2.keep = aiChoice.keep;
+
+        // 画面更新
+        document.getElementById('p1-progress').innerText = aiState.p1.progress.toFixed(2);
+        document.getElementById('p2-progress').innerText = aiState.p2.progress.toFixed(2);
+        
+        const logBox = document.getElementById('log');
+        const aiLog = `===【第 ${aiState.turn} ターン (AI戦) 結果】===\n` +
+                      `■ プレイヤー1 (あなた): [自分:${p1Choice.self}] [相手:${p1Choice.target}] [廃棄:${p1Choice.waste}] [保留:${p1Choice.keep}]\n` +
+                      `■ プレイヤー2 (AI)    : [自分:${aiChoice.self}] [相手:${aiChoice.target}] [廃棄:${aiChoice.waste}] [保留:${aiChoice.keep}]\n` +
+                      `  ⇒ 達成度: P1 ${aiState.p1.progress.toFixed(2)}% | P2 ${aiState.p2.progress.toFixed(2)}%\n` +
+                      `======================================\n\n`;
+        logBox.innerHTML = aiLog + logBox.innerHTML;
+
+        aiState.turn++;
+        document.getElementById('turn-count').innerText = aiState.turn;
+
+        // 次のターンへ
+        localKeep = p1Choice.keep;
         setupHandAndBoxes();
-        startTimer();
-        document.getElementById('log').innerHTML = "【注意】これはサーバー無しの疑似オンライン画面です。実際の通信対戦を行うには、付属のサーバーコード(Node.js)を実行してください。";
+        startTimer(300);
     }
 </script>
 </body>
