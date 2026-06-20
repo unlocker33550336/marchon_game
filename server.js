@@ -1,4 +1,4 @@
-// server.js (温度分離・通信バグ完全修正版)
+// server.js (フリーズ・不正移動完全修正版)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -10,20 +10,17 @@ app.get('/', (req, res) => {
 });
 app.use(express.static(__dirname));
 
-// 全体の状態管理
 let rooms = {
     p1: null, p2: null,
     choices: { p1: null, p2: null },
     state: {
         turn: 1,
-        // 🌟 温度（temp）をプレイヤーごとに完全に独立して初期化（5℃）
         p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [] },
         p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [] }
     }
 };
 
 io.on('connection', (socket) => {
-    // プレイヤーの切断後の再接続（リロード対策）
     if (!rooms.p1) {
         rooms.p1 = socket.id;
         socket.emit('assigned_player', 1);
@@ -31,12 +28,8 @@ io.on('connection', (socket) => {
         rooms.p2 = socket.id;
         socket.emit('assigned_player', 2);
         io.emit('game_start'); 
-    } else {
-        // すでに2人埋まっている状態でリロードが起きた場合、空いている方にIDを上書きして救済
-        socket.emit('assigned_player', 3); // 観戦用、または再登録のトリガー
     }
 
-    // 🌟 相手のドラッグ＆ドロップ配置の残像（パタパタ動くやつ）をそのまま相手にブロードキャスト
     socket.on('player_move_card', (data) => {
         socket.broadcast.emit('opponent_moving_card', {
             player: data.player,
@@ -52,9 +45,12 @@ io.on('connection', (socket) => {
         if (data.player === 1) rooms.choices.p1 = data.choice;
         if (data.player === 2) rooms.choices.p2 = data.choice;
 
+        // 両者揃ったら確実に計算して結果を届ける
         if (rooms.choices.p1 && rooms.choices.p2) {
             const nextResult = calculateOfficialLogic(rooms.choices.p1, rooms.choices.p2, rooms.state);
             io.emit('round_result', nextResult);
+            
+            // データをリセットして次のターンの待機へ
             rooms.choices.p1 = null;
             rooms.choices.p2 = null;
         }
@@ -66,22 +62,17 @@ io.on('connection', (socket) => {
     });
 });
 
-// 手書きノート公式ロジック（個別温度計算版）
 function calculateOfficialLogic(c1, c2, state) {
-    // 🌟 1. 太陽カードによる個別温度の上昇（自分に入れたら自分、相手から贈られたら自分）
     let p1SunTriggered = c1.self.includes('sun') || c2.target.includes('sun');
     let p2SunTriggered = c2.self.includes('sun') || c1.target.includes('sun');
-    
     if (p1SunTriggered) state.p1.temp += 1;
     if (p2SunTriggered) state.p2.temp += 1;
 
-    // 2. 応援カウントの個別更新
     if (c1.self.includes('cheer')) state.p1.cheerCount++;
     if (c2.target.includes('cheer')) state.p1.cheerCount++;
     if (c2.self.includes('cheer')) state.p2.cheerCount++;
     if (c1.target.includes('cheer')) state.p2.cheerCount++;
 
-    // 3. 石カウント（連続ペナルティ用）の更新
     let p1Stone = (c1.self.includes('stone') ? 1 : 0) + (c2.target.includes('stone') ? 1 : 0);
     let p2Stone = (c2.self.includes('stone') ? 1 : 0) + (c1.target.includes('stone') ? 1 : 0);
     state.p1.stoneCount += p1Stone;
@@ -89,7 +80,6 @@ function calculateOfficialLogic(c1, c2, state) {
     state.p1.consecutiveStone = p1Stone > 0 ? state.p1.consecutiveStone + 1 : 0;
     state.p2.consecutiveStone = p2Stone > 0 ? state.p2.consecutiveStone + 1 : 0;
 
-    // 4. 水カウント（不使用ペナルティ用）の更新
     let p1Water = (c1.self.includes('water') ? 1 : 0) + (c2.target.includes('water') ? 1 : 0);
     let p2Water = (c2.self.includes('water') ? 1 : 0) + (c1.target.includes('water') ? 1 : 0);
     state.p1.waterHistory.push(p1Water); if(state.p1.waterHistory.length > 4) state.p1.waterHistory.shift();
@@ -97,7 +87,7 @@ function calculateOfficialLogic(c1, c2, state) {
     state.p1.noWaterCount = p1Water === 0 ? state.p1.noWaterCount + 1 : 0;
     state.p2.noWaterCount = p2Water === 0 ? state.p2.noWaterCount + 1 : 0;
 
-    // --- 5. プレイヤー1のスピード計算 ---
+    // P1スピード
     let p1Spd = 5;
     if (state.p1.temp >= 6 && state.p1.temp <= 10) p1Spd = 7;
     else if (state.p1.temp >= 10 && state.p1.temp <= 15) p1Spd = 10;
@@ -112,7 +102,7 @@ function calculateOfficialLogic(c1, c2, state) {
     if (state.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (state.p1.progress >= 80) ? 3 : 2;
     if (state.p1.noWaterCount >= 4) p1Spd -= (0.5 * (state.p1.noWaterCount - 3));
 
-    // --- 6. プレイヤー2のスピード計算 ---
+    // P2スピード
     let p2Spd = 5;
     if (state.p2.temp >= 6 && state.p2.temp <= 10) p2Spd = 7;
     else if (state.p2.temp >= 10 && state.p2.temp <= 15) p2Spd = 10;
@@ -127,7 +117,6 @@ function calculateOfficialLogic(c1, c2, state) {
     if (state.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (state.p2.progress >= 80) ? 3 : 2;
     if (state.p2.noWaterCount >= 4) p2Spd -= (0.5 * (state.p2.noWaterCount - 3));
 
-    // 合計値を反映
     state.p1.progress += p1Spd;
     state.p2.progress += p2Spd;
     state.turn++;
@@ -135,14 +124,12 @@ function calculateOfficialLogic(c1, c2, state) {
     return {
         p1Progress: state.p1.progress,
         p2Progress: state.p2.progress,
-        p1Temp: state.p1.temp, // 🌟 個別の温度を返却
-        p2Temp: state.p2.temp, // 🌟 個別の温度を返却
+        p1Temp: state.p1.temp,
+        p2Temp: state.p2.temp,
         nextTurn: state.turn,
         keeps: { p1: c1.keep, p2: c2.keep }
     };
 }
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log(`THE MARATHON Server on port ${PORT}`);
-});
+http.listen(PORT, () => { console.log(`Server running`); });
