@@ -3,886 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE MARATHON - 完全公式レート版</title>
+    <title>THE GAME PLATFORM - 中央統合ロビー</title>
     <style>
-        /* --- 既存の美麗ダークテーマ ＆ 新機能UI用CSSの完全融合 --- */
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 10px; margin: 0; user-select: none; }
-        .container { max-width: 600px; margin: 0 auto; padding: 5px; position: relative; }
-        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-size: 22px; text-shadow: 0 0 8px rgba(255,71,87,0.3); }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #0f0f12; color: #e2e8f0; padding: 20px; margin: 0; user-select: none; }
+        .container { max-width: 800px; margin: 40px auto; padding: 10px; }
+        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 3px; font-size: 28px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,71,87,0.4); }
         
-        /* トップ認証・ロビー・管理者用追加スタイル */
-        .auth-panel, .lobby-panel, .admin-panel { background: #1e1e1e; border: 2px solid #333; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 15px; }
-        .auth-input { width: 85%; padding: 10px; margin: 8px 0; border: 1px solid #444; border-radius: 6px; background: #26262b; color: #fff; font-size: 14px; }
+        .auth-panel, .lobby-panel { background: #15151a; border: 2px solid #26262b; border-radius: 20px; padding: 30px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .auth-input { width: 80%; max-width: 400px; padding: 12px; margin: 10px 0; border: 1px solid #333; border-radius: 8px; background: #1c1c24; color: #fff; font-size: 15px; transition: border-color 0.3s; }
         .auth-input:focus { border-color: #ff4757; outline: none; }
         
-        /* ランク別バッジカラー */
-        .badge { padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-left: 5px; vertical-align: middle; }
-        .rank-NORMAL { background: #747d8c; color: #fff; }
-        .rank-ELITE { background: #2ed573; color: #fff; box-shadow: 0 0 8px rgba(46,213,115,0.4); }
-        .rank-PREMIUM { background: #1e90ff; color: #fff; box-shadow: 0 0 8px rgba(30,144,255,0.4); }
-        .rank-VIP { background: #ffa500; color: #fff; box-shadow: 0 0 12px rgba(255,165,0,0.6); animation: vipAnm 2s infinite; }
-        .rank-GUEST { background: #a4b0be; color: #2f3542; }
-        @keyframes vipAnm { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
-
-        /* 管理者テーブル */
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #16161a; text-align: left; font-size: 12px; }
-        .admin-table th, .admin-table td { padding: 8px; border: 1px solid #333; }
-        .admin-table th { background: #ff4757; color: white; }
-
-        /* --- マラソンコース --- */
-        .marathon-track { background: #222; border: 2px solid #333; border-radius: 12px; margin-bottom: 15px; position: relative; height: 70px; overflow: hidden; }
-        .lane { height: 35px; position: relative; display: flex; align-items: center; transition: background-color 0.5s; }
-        #lane-p1 { border-bottom: 1px dashed #444; background-color: #2e2e2e; }
-        #lane-p2 { background-color: #2e2e2e; }
-        .lane-label { font-size: 11px; color: #fff; font-weight: bold; position: absolute; left: 5px; z-index: 2; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px; }
-        .goal-line { position: absolute; right: 20px; top: 0; bottom: 0; width: 4px; background: repeating-linear-gradient(0deg, #fff, #fff 5px, #000 5px, #000 10px); z-index: 1; }
-        .runner { font-size: 22px; position: absolute; left: 0%; transition: left 1s ease-out; transform: translateX(10px); z-index: 3; }
+        /* プレイヤー情報カード */
+        .user-profile-card { background: linear-gradient(135deg, #1c1c24, #22222f); padding: 20px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #2d2d3d; display: flex; justify-content: space-around; align-items: center; wrap: wrap; }
+        .profile-item { text-align: center; padding: 10px 20px; }
+        .profile-label { font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+        .profile-value { font-size: 20px; font-weight: bold; color: #fff; }
         
-        .debt-badge { font-size: 9px; background: #ff4757; color: white; padding: 1px 4px; border-radius: 3px; margin-left: 5px; font-weight: bold; display: none; }
+        /* 統合ランクバッジ */
+        .badge { padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .rank-NORMAL { background: #4a5568; color: #fff; }
+        .rank-ELITE { background: #48bb78; color: #fff; box-shadow: 0 0 10px rgba(72,187,120,0.4); }
+        .rank-PREMIUM { background: #4299e1; color: #fff; box-shadow: 0 0 10px rgba(66,153,225,0.4); }
+        .rank-VIP { background: #ed8936; color: #fff; box-shadow: 0 0 15px rgba(237,137,54,0.6); animation: vipPulse 2s infinite; }
+        .rank-GUEST { background: #a0aec0; color: #1a202c; }
+        @keyframes vipPulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
 
-        .status-board { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; }
-        .timer { font-size: 20px; color: #ffa502; font-weight: bold; font-family: monospace; }
-
-        .game-area { display: none; position: relative; }
-        .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.05); z-index: 10; display: none; border-radius: 12px; }
-
-        /* 2段対面型フィールド */
-        .field-board { background: #1e1e1e; border: 2px solid #333; border-radius: 16px; padding: 15px; margin-bottom: 15px; position: relative; }
-        .field-section-title { font-size: 11px; color: #888; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
-        .field-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; position: relative; }
-        .field-row.opponent-row { margin-bottom: 0; }
+        /* ゲーム筐体セレクトグリッド */
+        .game-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-top: 25px; }
+        .game-card { background: #1c1c24; border: 1px solid #2d2d3d; border-radius: 14px; padding: 20px; cursor: pointer; transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1); text-align: center; position: relative; overflow: hidden; }
+        .game-card:hover { transform: translateY(-5px); border-color: #ff4757; box-shadow: 0 8px 20px rgba(255,71,87,0.15); }
+        .game-card h3 { margin: 0 0 10px 0; font-size: 18px; color: #fff; }
+        .game-card p { margin: 0; font-size: 12px; color: #718096; line-height: 1.5; }
         
-        .card-slot { background: #26262b; border: 2px dashed #444; border-radius: 10px; min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; transition: all 0.3s; }
-        .slot-label { font-size: 9px; color: #666; position: absolute; bottom: 4px; pointer-events: none; font-weight: bold; }
-
-        .hand-section { background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #444; }
-        .card-container { display: flex; gap: 10px; justify-content: center; min-height: 90px; align-items: center; }
-
-        /* カードグラフィック */
-        .card { width: 65px; height: 85px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; cursor: grab; text-align: center; font-size: 13px; padding: 3px; box-sizing: border-box; transition: transform 0.2s, background 0.3s; z-index: 2; box-shadow: 0 4px 6px rgba(0,0,0,0.4); }
-        .card[data-type="sun"] { background: linear-gradient(135deg, #ff9f43, #ff5252); }
-        .card[data-type="stone"] { background: linear-gradient(135deg, #57606f, #2f3542); }
-        .card[data-type="water"] { background: linear-gradient(135deg, #54a0ff, #00d2d3); }
-        .card[data-type="cheer"] { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
-        .card.mystery-card { background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #7f8c8d; color: #fff; font-size: 20px; font-weight: bold; cursor: not-allowed; }
-
-        .field-cutin { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: white; z-index: 20; display: none; text-shadow: 0 2px 4px rgba(0,0,0,0.8); box-shadow: inset 0 0 20px rgba(255,255,255,0.2); animation: fieldCutAnim 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        @keyframes fieldCutAnim { 0% { transform: scaleY(0); opacity: 0; } 100% { transform: scaleY(1); opacity: 1; } }
-
-        .event-trigger-section { background: #2f3542; border: 2px solid #ffa502; border-radius: 12px; padding: 10px; margin-bottom: 15px; text-align: center; display: none; }
-        .event-btn { background: #ffa502; color: #000; font-weight: bold; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        .game-status-tag { display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-bottom: 10px; text-transform: uppercase; }
+        .status-active { background: rgba(72,187,120,0.15); color: #48bb78; border: 1px solid #48bb78; }
+        .status-locked { background: rgba(113,128,150,0.15); color: #a0aec0; border: 1px solid #4a5568; cursor: not-allowed; }
         
-        .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .back-btn { background: #333; color: #ccc; border: 1px solid #444; padding: 5px 12px; font-size: 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .game-card.disabled { cursor: not-allowed; opacity: 0.6; }
+        .game-card.disabled:hover { transform: none; border-color: #2d2d3d; box-shadow: none; }
 
-        .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px; width: 100%; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
-        
-        .bottom-info-panel { background: #1e1e1e; border: 1px solid #333; padding: 12px; border-radius: 12px; margin-top: 15px; }
-        .chat-input-area { display: flex; gap: 5px; margin-top: 8px; }
-        .chat-input-area input { flex: 1; padding: 8px; background: #26262b; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 12px; }
-        .chat-send-btn { background: #54a0ff; color: #fff; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .chat-logs { max-height: 140px; overflow-y: auto; font-family: monospace; color: #4cd137; white-space: pre-wrap; line-height: 1.4; font-size: 12px; }
-        
-        .official-rule-board { background: #16161a; border: 1px solid #444; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 12px; line-height: 1.6; color: #ccc; }
-        .rule-title { font-size: 14px; color: #ffa502; font-weight: bold; margin-bottom: 8px; border-bottom: 1px dashed #444; padding-bottom: 4px; }
+        .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px 25px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .action-btn:hover { background: #ff6b81; }
         .hidden { display: none !important; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 <div class="container">
-    <div class="nav-bar">
-        <button class="back-btn" id="menu-back-btn" onclick="backToMenu()">↩ ロビーに戻る</button>
-        <h1>THE MARATHON</h1>
-        <div style="width:90px;"></div>
-    </div>
-    
+    <h1>THE GAME PLATFORM</h1>
+
     <div id="auth-panel" class="auth-panel">
-        <h2>走者識別認証</h2>
-        <input type="text" id="auth-username" class="auth-input" placeholder="走者識別名（ユーザー名）">
+        <h2 style="margin-bottom: 20px; color: #fff;">中央プラットフォーム認証</h2>
+        <input type="text" id="auth-username" class="auth-input" placeholder="ユーザー識別名">
         <input type="password" id="auth-password" class="auth-input" placeholder="暗号パスワード">
-        <div style="margin-top: 10px;">
-            <button class="action-btn" onclick="login()" style="width: 45%; margin-right: 5%;">ログイン</button>
-            <button class="action-btn" onclick="register()" style="width: 45%; background: #2ed573;">新規登録</button>
+        <div style="margin-top: 15px;">
+            <button class="action-btn" onclick="login()" style="width: 40%; margin-right: 5%;">ログイン</button>
+            <button class="action-btn" onclick="register()" style="width: 40%; background: #48bb78;">新規登録</button>
         </div>
-        <hr style="border: 0.5px solid #333; margin: 15px 0;">
-        <button class="action-btn" onclick="loginGuest()" style="background: #747d8c;">友達に走らせる（ゲストモード）</button>
+        <hr style="border: 0; border-top: 1px solid #2d2d3d; margin: 20px 0;">
+        <button class="action-btn" onclick="loginGuest()" style="background: #4a5568; width: 85%;">お試しゲストモードで入場</button>
     </div>
 
     <div id="lobby-panel" class="lobby-panel hidden">
-        <h2>極限回廊ロビー</h2>
-        <div style="background: #26262b; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333;">
-            <span style="font-size: 16px;">走者名: <span id="lobby-display-name" style="color:#2ed573; font-weight:bold;"></span></span>
-            <span id="lobby-display-rank" class="badge"></span>
-            <div style="margin-top: 10px; font-size: 18px;">
-                判定レート: <span id="lobby-display-rate" style="color:#ff4757; font-weight:bold;"></span> pt
-            </div>
-        </div>
-        <button class="action-btn" id="match-btn" onclick="toggleMatchmaking()" style="padding: 15px; font-size: 18px;">公式レートマッチング開始</button>
-        <button class="action-btn" onclick="startAIModeTrigger()" style="background: #10ac84; margin-top: 10px;">思考AI戦（練習・レート変動なし）</button>
-        <button class="action-btn" onclick="logout()" style="background: #ff6b81; margin-top: 10px; font-size: 12px; padding: 5px;">ログアウト</button>
-    </div>
-
-    <div id="matching-panel" class="lobby-panel hidden">
-        <div style="width: 30px; height: 30px; border: 4px solid #333; border-top: 4px solid #ff4757; border-radius: 50%; margin: 0 auto 10px; animation: spin 1s linear infinite;"></div>
-        <h3 style="color: #ffa502; margin: 5px 0;">対戦レーン同期中...</h3>
-        <p id="matching-timer" style="font-size: 18px; font-weight: bold; margin: 5px 0;">経過時間: 0秒</p>
-        <p style="font-size: 11px; color: #aaa; margin: 5px 0;">[状況]: <span id="search-phase-text" style="color:#ff6b81; font-weight:bold;">同階層レーティング制限検索中</span></p>
-        <button class="action-btn" onclick="toggleMatchmaking()" style="background: #747d8c; margin-top: 10px; width: 60%;">探索をキャンセル</button>
-    </div>
-    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-
-    <div id="admin-panel" class="admin-panel hidden">
-        <h3 style="color: #2ed573; margin: 5px 0;">🛡️ 中央管理者統治パネル</h3>
-        <p style="color: #888; font-size: 11px; margin: 0 0 10px 0;">全登録走者の戦績およびレートJSONデータの監視</p>
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>走者名</th>
-                    <th>レート</th>
-                    <th>階層</th>
-                    <th>勝数</th>
-                    <th>敗数</th>
-                    <th>最終遭遇</th>
-                </tr>
-            </thead>
-            <tbody id="admin-table-body"></tbody>
-        </table>
-        <button class="action-btn" onclick="logout()" style="background: #ff4757; margin-top: 15px; width: 50%;">管理者ログアウト</button>
-    </div>
-
-    <div class="game-area" id="game-area">
-        <div class="lock-overlay" id="lock-overlay"></div>
+        <h2 style="color: #fff; text-align: left; margin-bottom: 20px;">プラットフォーム・メインメニュー</h2>
         
-        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; background: #1c1c1e; padding: 5px 10px; border-radius: 6px;">
-            <div>👤 P1: <span id="p1-name-card" style="font-weight:bold; color:#ff4757;">YOU</span> <span id="p1-rate-card" style="color:#aaa;"></span></div>
-            <div>👥 P2: <span id="p2-name-card" style="font-weight:bold; color:#54a0ff;">ENEMY</span> <span id="p2-rate-card" style="color:#aaa;"></span></div>
-        </div>
-
-        <div class="marathon-track">
-            <div class="goal-line"></div>
-            <div class="lane" id="lane-p1">
-                <span class="lane-label">P1 <span class="debt-badge" id="debt-p1">壁: 0%</span></span>
-                <div class="runner" id="runner-p1">🏃</div>
+        <div class="user-profile-card">
+            <div class="profile-item">
+                <div class="profile-label">走者識別名</div>
+                <div class="profile-value" id="user-name" style="color: #48bb78;">----</div>
             </div>
-            <div class="lane" id="lane-p2">
-                <span class="lane-label">P2 <span class="debt-badge" id="debt-p2">壁: 0%</span></span>
-                <div class="runner" id="runner-p2">🏃</div>
+            <div class="profile-item">
+                <div class="profile-label">プラットフォーム階層</div>
+                <div style="margin-top: 5px;"><span id="user-rank" class="badge rank-NORMAL">NORMAL</span></div>
             </div>
-        </div>
-
-        <div class="status-board">
-            <div>ターン: <span id="turn-count">1</span></div>
-            <div class="timer" id="timer-display">05:00</div>
-        </div>
-
-        <div class="event-trigger-section" id="event-panel">
-            <p style="margin:0 0 5px 0; font-size:12px; color:#ffa502;">⚡ 【15ターン経過】イベント実行権が与えられました</p>
-            <button class="event-btn" id="evt-btn" onclick="declareEvent()">このターンにイベントを発動する</button>
-        </div>
-
-        <div class="field-board">
-            <div class="field-section-title">👤 自分側のフィールド</div>
-            <div class="field-row" id="my-field-row">
-                <div class="field-cutin" id="cutin-my-field"></div>
-                <div class="card-slot" id="slot-my-self"><span class="slot-label">📥自分用</span></div>
-                <div class="card-slot" id="slot-my-target"><span class="slot-label">📤相手用</span></div>
-                <div class="card-slot" id="slot-my-waste"><span class="slot-label">🗑️廃棄</span></div>
-                <div class="card-slot" id="slot-my-keep"><span class="slot-label">📦保留</span></div>
+            <div class="profile-item">
+                <div class="profile-label">一元化共通レート</div>
+                <div class="profile-value" id="user-rate" style="color: #ff4757;">--- pt</div>
             </div>
-
-            <div class="field-section-title" style="margin-top:15px;">👥 相手側のフィールド</div>
-            <div class="field-row opponent-row" id="opp-field-row">
-                <div class="field-cutin" id="cutin-opp-field"></div>
-                <div class="card-slot" id="slot-opp-self"><span class="slot-label">自分用</span></div>
-                <div class="card-slot" id="slot-opp-target"><span class="slot-label">相手用</span></div>
-                <div class="card-slot" id="slot-opp-waste"><span class="slot-label">廃棄</span></div>
-                <div class="card-slot" id="slot-opp-keep"><span class="slot-label">保留</span></div>
+            <div class="profile-item">
+                <div class="profile-label">全遊戯通算戦績</div>
+                <div class="profile-value" id="user-stats" style="font-size: 14px; color: #a0aec0;">0勝 / 0敗</div>
             </div>
         </div>
 
-        <div class="hand-section">
-            <div class="section-title" id="hand-title">あなたの手札</div>
-            <div class="card-container" id="zone-hand"></div>
+        <h3 style="text-align: left; color: #fff; border-bottom: 1px solid #2d2d3d; padding-bottom: 10px;">遊戯タイトル一覧</h3>
+        
+        <div class="game-grid">
+            <div class="game-card" onclick="enterGameRoom('marathon')">
+                <div class="game-status-tag status-active">稼働中（公式レート）</div>
+                <h3>THE MARATHON</h3>
+                <p>試練をボックスへ配置し、環境を支配して1000%のゴールを競う極限回廊ダイナミクスレース。</p>
+            </div>
+
+            <div class="game-card disabled">
+                <div class="game-status-tag status-locked">開発中</div>
+                <h3>極限リバーシ</h3>
+                <p>共通レートを賭けて盤面を裏返し合う、完全実力制の同期脳トレパズル（近日公開予定）。</p>
+            </div>
+
+            <div class="game-card disabled">
+                <div class="game-status-tag status-locked">開発中</div>
+                <h3>BLACK JACK</h3>
+                <p>手札の廃棄と保留の技術を応用した、インフレレート対応の次世代ポーカー＆数字心理戦。</p>
+            </div>
         </div>
 
-        <button class="action-btn" id="submit-btn" onclick="submitOnlineTurn()">配置を確定する</button>
-    </div>
-
-    <div class="bottom-info-panel">
-        <div class="chat-logs" id="chat-logs">【システム】走者識別認証を完了してください。</div>
-        <div class="chat-input-area" id="chat-entry-panel">
-            <input type="text" id="chat-input" placeholder="相手を揺さぶる言葉を打て..." onkeydown="if(event.key==='Enter')sendChat()">
-            <button class="chat-send-btn" onclick="sendChat()">送信</button>
+        <div style="margin-top: 40px; text-align: right;">
+            <button class="action-btn" onclick="logout()" style="background: #e53e3e; font-size: 13px; padding: 8px 20px;">ログアウト</button>
         </div>
-    </div>
-
-    <div class="official-rule-board">
-        <div class="rule-title">マラソンゲーム</div>
-        <p><strong>＜ルール＞</strong></p>
-        <p>これは、自分と敵（相手）のどちらがゴールできるのかのゲームです。</p>
-        <p>クリア条件は先にゴールすることです。5ターン1歩も進めなかったらゲームオーバーです。また、1ターンに5分以上をかけた場合は遅延行為で失格となります。</p>
-        <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。安定して進むための試練は全て自分達で用意します。</p>
-        <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えてしていきます。4つのボックスはそれぞれ、自分用、相手用、廃棄用、保留用です。自分用のボックスにカードを入れたら自分に効果が発動します。相手用のボックスにカードを入れたら相手に効果が発動します。廃棄用のボックスにカードは使わないカードを入れてください。保留用のボックスには1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</p>
-        <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、毎ターン5分以内にカードをボックスに設置してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
-        <p>カードは全部で4種類あり、それぞれ水カード、石カード、太陽カード、応援カードです。水カードはプレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。石カードはプレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落とします。太陽カードはプレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。応援カードはプレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</p>
-        <p>初期の気温は5℃です。</p>
-        <p><strong>＜イベント＞</strong></p>
-        <p>各プレイヤーは開始から15ターン経過するとイベントを実行する権利が与えられます。イベントを実行したプレイヤーは、実行したターンから10ターン後にイベントを実行する権利が再び与えられます。</p>
     </div>
 </div>
 
 <script>
     let socket = null;
-    let myPlayerNumber = 1; 
-    let isAIMode = false;
-    let timerInterval = null;
-    let timerSeconds = 300;
-    let localKeep = [];
-    let isLocked = false;
-    let eventReserved = false;
-    let myUsername = null;
-    let isMatching = false;
-    let matchSeconds = 0;
-    let matchTimerInterval = null;
 
-    let aiState = {
-        turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
-        p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
-        p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, consecutiveStone: 0, noWaterCount: 0, waterHistory: [], wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 }
-    };
-
-    // 🌟 【命綱】起動時に自動でバックアップ（セーブ）を確認して復旧を試みる
     window.onload = function() {
         const savedUser = localStorage.getItem('marathon_user');
         const savedToken = localStorage.getItem('marathon_token');
-        const savedMode = localStorage.getItem('marathon_mode');
-
         if (savedUser && savedToken) {
-            setupSocketConnection();
+            setupSocket();
             socket.emit('login', { username: savedUser, token: savedToken });
-        } else if (savedMode === 'ai') {
-            const savedState = localStorage.getItem('marathon_ai_state');
-            const savedKeep = localStorage.getItem('marathon_local_keep');
-            if (savedState) {
-                aiState = JSON.parse(savedState);
-                localKeep = savedKeep ? JSON.parse(savedKeep) : [];
-                isAIMode = true;
-                
-                document.getElementById('auth-panel').style.display = 'none';
-                document.getElementById('game-area').style.display = 'block';
-                document.getElementById('menu-back-btn').disabled = true;
-                
-                document.getElementById('turn-count').innerText = aiState.turn;
-                document.getElementById('runner-p1').style.left = Math.min((aiState.p1.progress / 10), 85) + "%";
-                document.getElementById('runner-p2').style.left = Math.min((aiState.p2.progress / 10), 85) + "%";
-                updateLaneColor('lane-p1', aiState.p1.temp);
-                updateLaneColor('lane-p2', aiState.p2.temp);
-                updateDebtBadge('debt-p1', aiState.p1.debt);
-                updateDebtBadge('debt-p2', aiState.p2.debt);
-                
-                document.getElementById('event-panel').style.display = (aiState.turn >= 15 && (aiState.turn - aiState.lastEventP1 >= 10)) ? 'block' : 'none';
-                
-                const savedLogs = localStorage.getItem('marathon_logs');
-                if(savedLogs) { document.getElementById('chat-logs').innerHTML = savedLogs; }
-                
-                unlockScreen();
-                setupHandAndBoxes();
-                startTimer(300);
-                writeLog("【システム】前回のAI対戦データから自動復帰しました！");
-            }
         }
     };
 
-    function setupSocketConnection() {
+    function setupSocket() {
         if (socket) return;
-        try { socket = io(); } catch(e) { alert("サーバーに接続できません"); return; }
-
-        // 🌟 自動再接続時のホットログイン回線修復処理
-        socket.on('connect', () => {
-            const savedUser = localStorage.getItem('marathon_user');
-            const savedToken = localStorage.getItem('marathon_token');
-            if (savedUser && savedToken && myUsername) {
-                socket.emit('login', { username: savedUser, token: savedToken });
-            }
-        });
+        socket = io();
 
         socket.on('register_res', (res) => { alert(res.msg); });
 
         socket.on('login_res', (res) => {
             if (res.success) {
-                myUsername = res.username;
-                if (!res.isGuest && res.username !== 'admin') {
-                    localStorage.setItem('marathon_user', res.username);
-                    const pwdInput = document.getElementById('auth-password').value;
-                    if (pwdInput) localStorage.setItem('marathon_token', pwdInput);
-                }
+                localStorage.setItem('marathon_user', res.username);
+                const pwd = document.getElementById('auth-password').value.trim();
+                if (pwd) localStorage.setItem('marathon_token', pwd);
 
                 document.getElementById('auth-panel').classList.add('hidden');
-                document.getElementById('menu-back-btn').disabled = false;
+                document.getElementById('lobby-panel').classList.remove('hidden');
 
-                if (res.username === 'admin') {
-                    document.getElementById('admin-panel').classList.remove('hidden');
-                    socket.emit('get_admin_data');
-                } else {
-                    document.getElementById('lobby-panel').classList.remove('hidden');
-                    document.getElementById('lobby-display-name').innerText = res.username;
-                    document.getElementById('lobby-display-rate').innerText = res.rate;
-                    const b = document.getElementById('lobby-display-rank');
-                    b.innerText = res.rank; b.className = `badge rank-${res.rank}`;
+                document.getElementById('user-name').innerText = res.username;
+                document.getElementById('user-rate').innerText = res.rate + " pt";
+                
+                const rankBadge = document.getElementById('user-rank');
+                rankBadge.innerText = res.rank;
+                rankBadge.className = `badge rank-${res.rank}`;
+
+                if (res.win !== undefined && res.lose !== undefined) {
+                    document.getElementById('user-stats').innerText = `${res.win} 勝 / ${res.lose} 敗`;
                 }
-                writeLog(`【システム】走者 [${res.username}] として認証に成功しました。`);
             } else {
-                alert(res.msg);
+                alert(res.msg || "ログインに失敗しました");
+                clearAuthBackup();
             }
-        });
-
-        socket.on('admin_data_res', (players) => {
-            const tbody = document.getElementById('admin-table-body');
-            tbody.innerHTML = "";
-            for (let name in players) {
-                let p = players[name];
-                let row = `<tr>
-                    <td style="font-weight:bold; color:${name==='admin'?'#2ed573':'#fff'};">${name}</td>
-                    <td style="color:#ff4757; font-weight:bold;">${p.rate}</td>
-                    <td><span class="badge rank-${p.rank}">${p.rank}</span></td>
-                    <td style="color:#2ed573;">${p.win}</td>
-                    <td style="color:#ff6b81;">${p.lose}</td>
-                    <td style="color:#aaa;">${p.lastPlayedWith || 'なし'}</td>
-                </tr>`;
-                tbody.innerHTML += row;
-            }
-        });
-
-        socket.on('matchmaking_started', () => {
-            isMatching = true;
-            document.getElementById('lobby-panel').classList.add('hidden');
-            document.getElementById('matching-panel').classList.remove('hidden');
-            matchSeconds = 0;
-            document.getElementById('matching-timer').innerText = `経過時間: 0秒`;
-            document.getElementById('search-phase-text').innerText = "同階層レーティング制限検索中";
-            document.getElementById('search-phase-text').style.color = "#ff4757";
-
-            matchTimerInterval = setInterval(() => {
-                matchSeconds++;
-                document.getElementById('matching-timer').innerText = `経過時間: ${matchSeconds}秒`;
-                if (matchSeconds >= 15 && matchSeconds < 30) {
-                    document.getElementById('search-phase-text').innerText = "周辺階層レーティング緩和検索中";
-                    document.getElementById('search-phase-text').style.color = "#ffa500";
-                } else if (matchSeconds >= 30) {
-                    document.getElementById('search-phase-text').innerText = "全階層無制限マッチング検索中";
-                    document.getElementById('search-phase-text').style.color = "#2ed573";
-                }
-            }, 1000);
-        });
-
-        socket.on('matchmaking_stopped', () => {
-            isMatching = false;
-            clearInterval(matchTimerInterval);
-            document.getElementById('matching-panel').classList.add('hidden');
-            document.getElementById('lobby-panel').classList.remove('hidden');
-        });
-
-        // 🌟 修正：最初から実名とレートをフルオープンで画面に即時反映
-        socket.on('match_found', (data) => {
-            isMatching = false;
-            clearInterval(matchTimerInterval);
-            document.getElementById('matching-panel').classList.add('hidden');
-            document.getElementById('game-area').style.display = 'block';
-            document.getElementById('menu-back-btn').disabled = true;
-
-            // P1とP2のネームカードに、潜伏テキストではなく本物のユーザー名とレートを即座に叩き込む
-            document.getElementById('p1-name-card').innerText = data.p1.username;
-            document.getElementById('p1-rate-card').innerText = `[${data.p1.rate}pt]`;
-            document.getElementById('p2-name-card').innerText = data.p2.username;
-            document.getElementById('p2-rate-card').innerText = `[${data.p2.rate}pt]`;
-
-            unlockScreen(); setupHandAndBoxes(); startTimer(300);
-        });
-
-        socket.on('assigned_player', (num) => {
-            myPlayerNumber = num;
-            localStorage.setItem('marathon_mode', 'online');
-            localStorage.setItem('marathon_online_role', num);
-        });
-
-        socket.on('restore_online_state', (syncData) => {
-            document.getElementById('lobby-panel').classList.add('hidden');
-            document.getElementById('game-area').style.display = 'block';
-            document.getElementById('menu-back-btn').disabled = true;
-            myPlayerNumber = syncData.role;
-            
-            document.getElementById('turn-count').innerText = syncData.state.turn;
-            document.getElementById('runner-p1').style.left = Math.min((syncData.state.p1.progress / 10), 85) + "%";
-            document.getElementById('runner-p2').style.left = Math.min((syncData.state.p2.progress / 10), 85) + "%";
-            
-            updateLaneColor('lane-p1', syncData.state.p1.temp);
-            updateLaneColor('lane-p2', syncData.state.p2.temp);
-            updateDebtBadge('debt-p1', syncData.state.p1.debt);
-            updateDebtBadge('debt-p2', syncData.state.p2.debt);
-            
-            document.getElementById('event-panel').style.display = (myPlayerNumber === 1 ? syncData.p1CanEvent : syncData.p2CanEvent) ? 'block' : 'none';
-            localKeep = syncData.currentKeep;
-            
-            unlockScreen(); setupHandAndBoxes(); startTimer(syncData.remainTimer);
-            writeLog("【システム】通信切断・リロードからオンライン対戦へ自動復帰しました。");
-        });
-
-        socket.on('opponent_moving_card', (data) => {
-            document.querySelectorAll('.opponent-row .mystery-card').forEach(c => c.remove());
-            if (data.targetZone && data.targetZone !== 'hand') {
-                const targetSlot = document.getElementById(`slot-opp-${data.targetZone}`);
-                if (targetSlot) {
-                    const mysteryCard = document.createElement('div');
-                    mysteryCard.className = 'card mystery-card'; mysteryCard.innerText = '?';
-                    targetSlot.appendChild(mysteryCard);
-                }
-            }
-        });
-
-        socket.on('receive_chat', (msg) => { writeLog(msg); });
-        
-        socket.on('game_over_timeout', (data) => {
-            clearInterval(timerInterval); lockScreen();
-            writeLog(`\n【遅延行為】プレイヤー ${data.foulPlayer} が時間切れにより失格。`);
-            document.getElementById('menu-back-btn').disabled = false;
-            clearAllBackup();
-        });
-
-        socket.on('game_clear', (data) => {
-            clearInterval(timerInterval); lockScreen();
-            writeLog(`\n🎉 【ゴール達成】勝者：プレイヤー ${data.winner}！`);
-            document.getElementById('menu-back-btn').disabled = false;
-            clearAllBackup();
-        });
-
-        socket.on('game_over', (result) => {
-            clearInterval(timerInterval); lockScreen();
-            let msg = (result.winner === myUsername) ? `【大勝利】獲得レート: +${result.rateChange} pt` : `【敗北】喪失レート: -${result.rateChange} pt`;
-            if (result.winner === 'DRAW') msg = "【引き分け】完全同時同点ドローです。";
-            alert(msg); clearAllBackup(); location.reload();
-        });
-
-        socket.on('round_result', (data) => {
-            let oppChoice = myPlayerNumber === 1 ? data.p2ChoiceRaw : data.p1ChoiceRaw;
-            revealOpponentCards(oppChoice);
-
-            // フルオープン化によりここは確認用として最新データを上書き
-            if (data.p1Name && data.p2Name) {
-                document.getElementById('p1-name-card').innerText = data.p1Name;
-                document.getElementById('p1-rate-card').innerText = `[${data.p1Rate}pt]`;
-                document.getElementById('p2-name-card').innerText = data.p2Name;
-                document.getElementById('p2-rate-card').innerText = `[${data.p2Rate}pt]`;
-            }
-
-            if(data.activeEvent) {
-                let targetCutinId = (data.eventSender === myPlayerNumber) ? 'cutin-my-field' : 'cutin-opp-field';
-                triggerFieldCutin(targetCutinId, data.activeEvent);
-            }
-
-            setTimeout(() => {
-                document.getElementById('turn-count').innerText = data.nextTurn;
-                document.getElementById('runner-p1').style.left = Math.min((data.p1Progress / 10), 85) + "%";
-                document.getElementById('runner-p2').style.left = Math.min((data.p2Progress / 10), 85) + "%";
-
-                updateLaneColor('lane-p1', data.p1Temp);
-                updateLaneColor('lane-p2', data.p2Temp);
-                updateDebtBadge('debt-p1', data.p1Debt);
-                updateDebtBadge('debt-p2', data.p2Debt);
-
-                writeLog(data.resultLog);
-
-                document.getElementById('event-panel').style.display = (myPlayerNumber === 1 ? data.p1CanEvent : data.p2CanEvent) ? 'block' : 'none';
-
-                localKeep = data.keeps[myPlayerNumber === 1 ? 'p1' : 'p2'];
-                eventReserved = false;
-                document.getElementById('evt-btn').disabled = false;
-                document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
-
-                unlockScreen(); setupHandAndBoxes(); startTimer(300);
-            }, 2500); 
         });
     }
 
     function login() {
-        setupSocketConnection();
+        setupSocket();
         const u = document.getElementById('auth-username').value.trim();
         const p = document.getElementById('auth-password').value.trim();
-        if(!u || !p) return alert("名前とパスワードを入力してください");
+        if (!u || !p) return alert("ユーザー名とパスワードを入力してください");
         socket.emit('login', { username: u, password: p });
     }
 
     function register() {
-        setupSocketConnection();
+        setupSocket();
         const u = document.getElementById('auth-username').value.trim();
         const p = document.getElementById('auth-password').value.trim();
-        if(!u || !p) return alert("名前とパスワードを入力してください");
+        if (!u || !p) return alert("ユーザー名とパスワードを入力してください");
         socket.emit('register', { username: u, password: p });
     }
 
     function loginGuest() {
-        setupSocketConnection();
+        setupSocket();
         socket.emit('login_guest');
     }
 
+    function enterGameRoom(gameId) {
+        if (gameId === 'marathon') {
+            location.href = '/marathon.html';
+        }
+    }
+
     function logout() {
-        clearAllBackup();
+        clearAuthBackup();
         location.reload();
     }
 
-    function toggleMatchmaking() {
-        if (!isMatching) {
-            socket.emit('join_matchmaking');
-        } else {
-            socket.emit('leave_matchmaking');
-        }
-    }
-
-    function startAIModeTrigger() {
-        isAIMode = true; myPlayerNumber = 1;
-        localStorage.setItem('marathon_mode', 'ai');
-        localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
-        localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
-        
-        document.getElementById('lobby-panel').classList.add('hidden');
-        document.getElementById('game-area').style.display = 'block';
-        document.getElementById('menu-back-btn').disabled = true;
-        writeLog("【システム】AI対戦（練習モード）開始。目標は1000%！");
-        unlockScreen(); setupHandAndBoxes(); startTimer(300);
-    }
-
-    function revealOpponentCards(oppChoice) {
-        document.querySelectorAll('.opponent-row .card, .opponent-row .mystery-card').forEach(c => c.remove());
-        const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
-        for (let key in oppChoice) {
-            if(key === 'hand') continue;
-            const slot = document.getElementById(`slot-opp-${key}`);
-            if(slot) {
-                oppChoice[key].forEach(type => {
-                    const card = document.createElement('div');
-                    card.className = 'card opened-opp-card'; card.dataset.type = type; card.innerText = labels[type];
-                    slot.appendChild(card);
-                });
-            }
-        }
-    }
-
-    function triggerFieldCutin(elementId, evtInfo) {
-        const board = document.getElementById(elementId);
-        board.innerText = evtInfo.title;
-        board.style.background = evtInfo.color;
-        board.style.display = 'flex';
-        setTimeout(() => { board.style.display = 'none'; }, 2200);
-    }
-
-    function updateDebtBadge(badgeId, debtValue) {
-        const badge = document.getElementById(badgeId);
-        if(debtValue > 0) { badge.innerText = `壁: -${debtValue}%`; badge.style.display = 'inline-block'; }
-        else { badge.style.display = 'none'; }
-    }
-
-    // 🌟 修正：イベント予約時の引数をサーバーの新しい仕分け構造に適合
-    function declareEvent() {
-        eventReserved = true;
-        document.getElementById('evt-btn').disabled = true;
-        document.getElementById('evt-btn').innerText = "イベント発動予約済み";
-        if (!isAIMode) { socket.emit('reserve_event', { player: myPlayerNumber }); }
-    }
-
-    function writeLog(msg) {
-        const logs = document.getElementById('chat-logs');
-        logs.innerHTML += `\n${msg}`; logs.scrollTop = logs.scrollHeight;
-        if(isAIMode) { localStorage.setItem('marathon_logs', logs.innerHTML); }
-    }
-
-    function updateLaneColor(laneId, temp) {
-        const laneEl = document.getElementById(laneId);
-        if (temp < 5) laneEl.style.backgroundColor = "#4a69bd";
-        else if (temp === 5) laneEl.style.backgroundColor = "#2e2e2e";
-        else if (temp >= 6 && temp <= 9) laneEl.style.backgroundColor = "#f1c40f";
-        else if (temp >= 10 && temp <= 14) laneEl.style.backgroundColor = "#e67e22";
-        else laneEl.style.backgroundColor = `rgb(${Math.min(150, 70 + (temp - 15) * 15)}, 15, 15)`;
-    }
-
-    function lockScreen() {
-        isLocked = true;
-        document.getElementById('lock-overlay').style.display = 'block';
-        document.getElementById('submit-btn').disabled = true;
-    }
-
-    function unlockScreen() {
-        isLocked = false;
-        document.getElementById('lock-overlay').style.display = 'none';
-        document.getElementById('submit-btn').disabled = false;
-        document.getElementById('submit-btn').innerText = "配置を確定する";
-    }
-
-    function notifyCardMove(slotId) {
-        if(isLocked || isAIMode || !socket) return;
-        let zoneName = slotId.replace('slot-my-', '');
-        socket.emit('player_move_card', { player: myPlayerNumber, targetZone: zoneName });
-    }
-
-    function canAddToKeep(cardId, targetSlotId) {
-        if (targetSlotId !== 'slot-my-keep') return true;
-        const keepSlot = document.getElementById('slot-my-keep');
-        const hasCard = Array.from(keepSlot.children).some(el => el.classList.contains('card'));
-        if (hasCard) { alert("保留枠には最大1枚しか置けません！"); return false; }
-        return true;
-    }
-
-    function setupHandAndBoxes() {
-        const handZone = document.getElementById('zone-hand');
-        document.querySelectorAll('#my-field-row .card-slot').forEach(slot => {
-            const label = slot.querySelector('.slot-label');
-            slot.innerHTML = ''; if(label) slot.appendChild(label);
-        });
-        document.querySelectorAll('.opponent-row .opened-opp-card').forEach(c => c.remove());
-        handZone.innerHTML = '';
-
-        const types = ['sun', 'stone', 'water', 'cheer'];
-        const labels = { sun: '太陽', stone: '石', water: '水', cheer: '応援' };
-
-        types.forEach(type => {
-            const card = document.createElement('div');
-            card.className = 'card'; card.draggable = true; card.dataset.type = type;
-            card.id = `card-${type}-${Math.floor(Math.random() * 100000)}`;
-            card.innerText = labels[type];
-            
-            if (localKeep.includes(type)) { document.getElementById('slot-my-keep').appendChild(card); }
-            else { handZone.appendChild(card); }
-        });
-
-        document.querySelectorAll('.card').forEach(card => {
-            card.addEventListener('dragstart', (e) => {
-                if(isLocked) { e.preventDefault(); return; }
-                e.dataTransfer.setData('text/plain', e.target.id);
-            });
-            card.onclick = () => {
-                if(isLocked) return;
-                const slotIds = ['zone-hand', 'slot-my-self', 'slot-my-target', 'slot-my-waste', 'slot-my-keep'];
-                let currentZoneId = card.parentElement.id === 'zone-hand' ? 'zone-hand' : card.parentElement.id;
-                let nextIdx = (slotIds.indexOf(currentZoneId) + 1) % slotIds.length;
-                if (slotIds[nextIdx] === 'slot-my-keep' && !canAddToKeep(card.id, 'slot-my-keep')) nextIdx = 0;
-                const nextZoneEl = document.getElementById(slotIds[nextIdx]);
-                nextZoneEl.appendChild(card); notifyCardMove(nextZoneEl.id);
-            };
-        });
-    }
-
-    document.querySelectorAll('.card-slot, #zone-hand').forEach(zone => {
-        zone.addEventListener('dragover', (e) => e.preventDefault());
-        zone.addEventListener('drop', (e) => {
-            e.preventDefault(); if(isLocked) return;
-            const id = e.dataTransfer.getData('text/plain');
-            if(zone.id.startsWith('slot-my-') || zone.id === 'zone-hand') {
-                if (!canAddToKeep(id, zone.id)) return;
-                const dragged = document.getElementById(id);
-                if (dragged) { zone.appendChild(dragged); notifyCardMove(zone.id); }
-            }
-        });
-    });
-
-    function startTimer(seconds) {
-        clearInterval(timerInterval); timerSeconds = seconds; updateTimerDisplay();
-        timerInterval = setInterval(() => {
-            timerSeconds--; updateTimerDisplay();
-            if (timerSeconds <= 0) {
-                clearInterval(timerInterval);
-                if (isAIMode) { lockScreen(); document.getElementById('menu-back-btn').disabled = false; clearAllBackup(); alert("遅延失格によりゲームオーバー！"); }
-                else { socket.emit('player_timeout', { player: myPlayerNumber }); }
-            }
-        }, 1000);
-    }
-
-    function updateTimerDisplay() {
-        const min = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
-        const sec = String(timerSeconds % 60).padStart(2, '0');
-        document.getElementById('timer-display').innerText = `${min}:${sec}`;
-    }
-
-    function submitOnlineTurn() {
-        if(isLocked) return;
-        clearInterval(timerInterval);
-        
-        const getCards = (slotId) => {
-            const slot = document.getElementById(slotId);
-            return Array.from(slot.children).filter(el => el.classList.contains('card')).map(c => c.dataset.type);
-        };
-
-        const choice = {
-            self: getCards('slot-my-self'), target: getCards('slot-my-target'), waste: getCards('slot-my-waste'), keep: getCards('slot-my-keep'),
-            hand: Array.from(document.getElementById('zone-hand').children).map(c => c.dataset.type)
-        };
-
-        if (choice.hand.length > 0) {
-            alert("手札枠に残っているカードがあります！4枠のどこかへドラッグしてください。");
-            startTimer(timerSeconds); return;
-        }
-
-        lockScreen();
-
-        if (isAIMode) {
-            setTimeout(() => { executeAILogic(choice); }, 500);
-        } else {
-            document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
-            socket.emit('submit_turn', { player: myPlayerNumber, choice: choice, currentTimer: timerSeconds });
-        }
-    }
-
-    function executeAILogic(p1Choice) {
-        let aiChoice = { self: [], target: [], waste: [], keep: [] };
-        let types = ['sun', 'stone', 'water', 'cheer'];
-        let available = types.filter(t => !localKeep.includes(t)); 
-        
-        if (Math.random() < 0.25 && available.length > 0) {
-            let k = available.pop(); aiChoice.keep.push(k);
-        }
-        while(available.length > 0) {
-            let c = available.pop(); let r = Math.random();
-            if(r < 0.35) aiChoice.self.push(c); else if(r < 0.7) aiChoice.target.push(c); else aiChoice.waste.push(c);
-        }
-
-        revealOpponentCards(aiChoice);
-
-        setTimeout(() => {
-            p1Choice.waste.forEach(t => aiState.p1.wastePile[t]++);
-            aiChoice.waste.forEach(t => aiState.p2.wastePile[t]++);
-
-            if (aiState.turn >= 15 && (aiState.turn - aiState.lastEventP2 >= 10)) { if (Math.random() > 0.6) aiState.p2Reserved = true; }
-            if (eventReserved) aiState.p1Reserved = true;
-
-            let evText = "";
-            if (aiState.p1Reserved) {
-                let pData = aiState.p1;
-                let maxType = 'cheer'; let maxCount = -1;
-                for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-my-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★あなた：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-my-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★あなた：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-my-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★あなた：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-my-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★あなた：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
-                pData.wastePile[maxType] = 0; aiState.lastEventP1 = aiState.turn; aiState.p1Reserved = false;
-            }
-
-            if (aiState.p2Reserved) {
-                let pData = aiState.p2;
-                let maxType = 'cheer'; let maxCount = -1;
-                for(let t in pData.wastePile) { if(pData.wastePile[t] > maxCount) { maxCount = pData.wastePile[t]; maxType = t; } }
-                if(maxType === 'water') { pData.temp -= maxCount; triggerFieldCutin('cutin-opp-field', { title: "天の涙 (HEAVENLY TEARS)", color: "linear-gradient(to right, #2980b9, #6dd5fa)" }); evText += `★AI：【天の涙】温度が ${maxCount}℃ 下がった！\n`; }
-                else if(maxType === 'stone') { pData.debt += maxCount; triggerFieldCutin('cutin-opp-field', { title: "避けられぬ現実 (CRUEL REALITY)", color: "linear-gradient(to right, #bdc3c7, #2c3e50)" }); evText += `★AI：【避けられぬ現実】自分に ${maxCount}% の進めない壁が出現！\n`; }
-                else if(maxType === 'sun') { pData.temp += maxCount; triggerFieldCutin('cutin-opp-field', { title: "地獄の炎のおでむかえ", color: "linear-gradient(to right, #e65c00, #f9d423)" }); evText += `★AI：【地獄の炎のおでむかえ】温度が ${maxCount}℃ 上がった！\n`; }
-                else if(maxType === 'cheer') { pData.progress += (maxCount * 4); triggerFieldCutin('cutin-opp-field', { title: "大応援 (ULTIMATE CHEER)", color: "linear-gradient(to right, #11998e, #38ef7d)" }); evText += `★AI：【大応援】 ${maxCount * 4}% 爆速前進！\n`; }
-                pData.wastePile[maxType] = 0; aiState.lastEventP2 = aiState.turn; aiState.p2Reserved = false;
-            }
-
-            let s = aiState;
-            let p1Sun = p1Choice.self.includes('sun') || aiChoice.target.includes('sun');
-            let p2Sun = aiChoice.self.includes('sun') || p1Choice.target.includes('sun');
-            if (p1Sun) s.p1.temp++; if (p2Sun) s.p2.temp++;
-
-            if (p1Choice.self.includes('cheer')) s.p1.cheerCount++; if (aiChoice.target.includes('cheer')) s.p1.cheerCount++;
-            if (aiChoice.self.includes('cheer')) s.p2.cheerCount++; if (p1Choice.target.includes('cheer')) s.p2.cheerCount++;
-
-            let p1Spd = 5; if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp)); else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7; else if (s.p1.temp >= 10 && s.p1.temp <= 15) p1Spd = 10; else if (s.p1.temp >= 15 && s.p1.temp <= 20) p1Spd = Math.max(5, 10 - (s.p1.temp - 15)); else if (s.p1.temp >= 20) p1Spd = Math.max(0, 5 - (s.p1.temp - 20));
-            if (p1Choice.self.includes('cheer')) p1Spd += 1; if (aiChoice.target.includes('cheer')) p1Spd += 1;
-            if (s.p1.cheerCount > 0 && s.p1.cheerCount % 10 === 0) p1Spd += (s.p1.cheerCount * 0.5);
-            let p1StoneNum = (p1Choice.self.includes('stone')?1:0) + (aiChoice.target.includes('stone')?1:0);
-            s.p1.stoneCount += p1StoneNum; s.p1.consecutiveStone = p1StoneNum > 0 ? s.p1.consecutiveStone + 1 : 0;
-            if (p1StoneNum > 0) p1Spd -= (s.p1.consecutiveStone > 1) ? (1 + (s.p1.consecutiveStone * 0.25)) : 1;
-            if (s.p1.stoneCount > 0 && s.p1.stoneCount % 10 === 0) p1Spd -= (s.p1.stoneCount * 0.5);
-            let p1WaterNum = (p1Choice.self.includes('water')?1:0) + (aiChoice.target.includes('water')?1:0);
-            s.p1.waterHistory.push(p1WaterNum); if(s.p1.waterHistory.length > 4) s.p1.waterHistory.shift(); s.p1.noWaterCount = p1WaterNum === 0 ? s.p1.noWaterCount + 1 : 0;
-            if (s.p1.waterHistory.reduce((a,b)=>a+b,0) >= 3) p1Spd -= (s.p1.progress >= 800) ? 3 : 2;
-            if (s.p1.noWaterCount >= 4) p1Spd -= (0.5 * (s.p1.noWaterCount - 3));
-
-            let p2Spd = 5; if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp)); else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7; else if (s.p2.temp >= 10 && s.p2.temp <= 15) p2Spd = 10; else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15)); else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
-            if (aiChoice.self.includes('cheer')) p2Spd += 1; if (p1Choice.target.includes('cheer')) p2Spd += 1;
-            if (s.p2.cheerCount > 0 && s.p2.cheerCount % 10 === 0) p2Spd += (s.p2.cheerCount * 0.5);
-            let p2StoneNum = (aiChoice.self.includes('stone')?1:0) + (p1Choice.target.includes('stone')?1:0);
-            s.p2.stoneCount += p2StoneNum; s.p2.consecutiveStone = p2StoneNum > 0 ? s.p2.consecutiveStone + 1 : 0;
-            if (p2StoneNum > 0) p2Spd -= (s.p2.consecutiveStone > 1) ? (1 + (s.p2.consecutiveStone * 0.25)) : 1;
-            if (s.p2.stoneCount > 0 && s.p2.stoneCount % 10 === 0) p2Spd -= (s.p2.stoneCount * 0.5);
-            let p2WaterNum = (aiChoice.self.includes('water')?1:0) + (p1Choice.target.includes('water')?1:0);
-            s.p2.waterHistory.push(p2WaterNum); if(s.p2.waterHistory.length > 4) s.p2.waterHistory.shift(); s.p2.noWaterCount = p2WaterNum === 0 ? s.p2.noWaterCount + 1 : 0;
-            if (s.p2.waterHistory.reduce((a,b)=>a+b,0) >= 3) p2Spd -= (s.p2.progress >= 800) ? 3 : 2;
-            if (s.p2.noWaterCount >= 4) p2Spd -= (0.5 * (s.p2.noWaterCount - 3));
-
-            if(p1Spd < 0) { s.p1.debt += Math.abs(p1Spd); p1Spd = 0; }
-            else if(s.p1.debt > 0) { if(p1Spd >= s.p1.debt) { p1Spd -= s.p1.debt; s.p1.debt = 0; } else { s.p1.debt -= p1Spd; p1Spd = 0; } }
-
-            if(p2Spd < 0) { s.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
-            else if(s.p2.debt > 0) { if(p2Spd >= s.p2.debt) { p2Spd -= s.p2.debt; s.p2.debt = 0; } else { s.p2.debt -= p2Spd; p2Spd = 0; } }
-
-            s.p1.consecutiveNoProgress = (p1Spd === 0) ? s.p1.consecutiveNoProgress + 1 : 0;
-            s.p2.consecutiveNoProgress = (p2Spd === 0) ? s.p2.consecutiveNoProgress + 1 : 0;
-
-            if(s.p1.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert("5ターン一歩も進めなかったため、ゲームオーバーです。"); return; }
-            if(s.p2.consecutiveNoProgress >= 5) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert("相手が5ターン一歩も進めなかったため、あなたの勝ちです！"); return; }
-
-            s.p1.progress += p1Spd; s.p2.progress += p2Spd;
-
-            let resLog = `========================================\n` +
-                         `   【第 ${s.turn} ターン 結果発表】\n` +
-                         (evText ? evText.replace(/\\n/g, '\n') : "") +
-                         `👤 あなた(P1) -> [自分:${p1Choice.self}] [相手:${p1Choice.target}] [進捗:${s.p1.progress}%] [壁:${s.p1.debt}%]\n` +
-                         `🤖 AI(P2)     -> [自分:${aiChoice.self}] [相手:${aiChoice.target}] [進捗:${s.p2.progress}%] [壁:${s.p2.debt}%]\n` +
-                         `========================================`;
-            writeLog(resLog);
-
-            document.getElementById('turn-count').innerText = ++s.turn;
-            document.getElementById('runner-p1').style.left = Math.min((s.p1.progress / 10), 85) + "%";
-            document.getElementById('runner-p2').style.left = Math.min((s.p2.progress / 10), 85) + "%";
-            updateLaneColor('lane-p1', s.p1.temp); updateLaneColor('lane-p2', s.p2.temp);
-            updateDebtBadge('debt-p1', s.p1.debt); updateDebtBadge('debt-p2', s.p2.debt);
-
-            localStorage.setItem('marathon_ai_state', JSON.stringify(aiState));
-            localKeep = p1Choice.keep;
-            localStorage.setItem('marathon_local_keep', JSON.stringify(localKeep));
-
-            if(s.p1.progress >= 1000 || s.p2.progress >= 1000) { clearInterval(timerInterval); lockScreen(); clearAllBackup(); alert(s.p1.progress >= s.p2.progress ? "あなたの勝ち！" : "AIの勝ち！"); return; }
-            document.getElementById('event-panel').style.display = (s.turn >= 15 && (s.turn - s.lastEventP1 >= 10)) ? 'block' : 'none';
-
-            eventReserved = false; document.getElementById('evt-btn').disabled = false; document.getElementById('evt-btn').innerText = "このターンにイベントを発動する";
-            unlockScreen(); setupHandAndBoxes(); startTimer(300);
-        }, 2500);
-    }
-
-    function sendChat() { 
-        const input = document.getElementById('chat-input'); 
-        if(!input.value.trim() || isAIMode || !socket) return; 
-        socket.emit('send_chat', `${myUsername || 'プレイヤー'}: ${input.value}`); 
-        input.value = ''; 
-    }
-
-    function clearAllBackup() {
-        localStorage.removeItem('marathon_mode');
-        localStorage.removeItem('marathon_ai_state');
-        localStorage.removeItem('marathon_local_keep');
-        localStorage.removeItem('marathon_logs');
-        localStorage.removeItem('marathon_online_role');
-    }
-
-    function backToMenu() {
-        if(!document.getElementById('game-area').style.display || document.getElementById('game-area').style.display === 'none') {
-            clearAllBackup(); window.location.reload();
-        } else {
-            alert("レース進行中はエスケープロックがかかっています！勝負から逃げることは許されません。");
-        }
-    }
-
-    function logout() {
-        if (socket) {
-            socket.emit('logout_user', { username: myUsername });
-        }
-        clearAllBackup();
+    function clearAuthBackup() {
         localStorage.removeItem('marathon_user');
         localStorage.removeItem('marathon_token');
-        
-        document.getElementById('lobby-panel').classList.add('hidden');
-        document.getElementById('admin-panel').classList.add('hidden');
-        document.getElementById('auth-panel').classList.remove('hidden');
-        
-        location.reload();
+        localStorage.removeItem('marathon_mode');
     }
 </script>
 </body>
