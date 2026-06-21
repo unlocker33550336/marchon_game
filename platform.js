@@ -16,7 +16,7 @@ const PORT = 3000;
 console.log('[DB CONNECT ATTEMPT] MongoDBへの接続を開始します...');
 console.log('-> 接続URIの有無:', process.env.MONGODB_URI ? "設定あり(OK)" : "設定なし(⚠️空っぽです)");
 
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect('mongodb+srv://gaohu1870_db_user:db_9logZ3FdhBWow37K@cluster0.4vbxzmx.mongodb.net/?appName=Cluster0')
   .then(() => console.log('✅ [DB SUCCESS] Platform Hub DB connected successfully'))
   .catch(err => console.error('❌ [DB CRITICAL ERROR] Platform Hub DB connection error:', err));
 
