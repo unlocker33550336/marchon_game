@@ -378,7 +378,6 @@ setInterval(async () => {
         });
     }
 }, 1000);
-
 // ==========================================
 // 5. 【超重要】同期型・データベース接続＆サーバー起動システム
 // ==========================================
@@ -386,8 +385,8 @@ async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
     
-    // フライング防止のため、バッファリングを強制無効化
-    await mongoose.connect('mongodb+srv://gaohu1870_db_user:db_9logZ3FdhBWow37K@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
+    // ⬇️ 修正するのはこの1行だけ！新しく変えたパスワードをここに入れる
+    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
     
@@ -401,7 +400,6 @@ async function startSecurePlatform() {
     });
 
   } catch (err) {
-    // もし接続自体に失敗したら、ここで原因の息の根を止めるログを吐き出す
     console.error('❌ [DB CRITICAL ERROR] データベース接続に失敗したため、サーバーの起動を非常停止しました:');
     console.error(err);
   }
