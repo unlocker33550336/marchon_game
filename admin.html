@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE MARATHON - 管理者司令室 (GM PANEL)</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background: #050508; color: #00ff66; margin: 0; padding: 20px; }
+        .admin-wrapper { max-width: 1000px; margin: 0 auto; }
+        
+        header { border-bottom: 2px dashed #00ff66; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 26px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 8px rgba(0,255,102,0.4); }
+        
+        .sys-status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
+        .status-box { background: #0c1015; border: 1px solid #00ff66; padding: 15px; border-radius: 6px; text-align: center; box-shadow: inset 0 0 10px rgba(0,255,102,0.1); }
+        .status-val { font-size: 28px; font-weight: bold; margin-top: 5px; font-family: monospace; }
+        
+        .control-panel { background: #0c1015; border: 1px solid #ff3333; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+        .control-panel h3 { margin: 0 0 15px 0; color: #ff3333; text-transform: uppercase; }
+        
+        table { width: 100%; border-collapse: collapse; background: #0c1015; border: 1px solid #333; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #222; }
+        th { background: #111; color: #00ff66; text-transform: uppercase; font-size: 13px; border-bottom: 2px solid #00ff66; }
+        tr:hover { background: #141c18; }
+        
+        .btn { background: #00ff66; color: #000; border: none; padding: 6px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; font-family: monospace; }
+        .btn:hover { background: #66ff99; box-shadow: 0 0 10px rgba(0,255,102,0.5); }
+        .btn-danger { background: #ff3333; color: white; }
+        .btn-danger:hover { background: #ff6666; box-shadow: 0 0 10px rgba(255,51,51,0.5); }
+        .btn-toggle { background: #ffaa00; color: black; font-size: 16px; padding: 10px 20px; }
+        
+        .rate-input { background: #000; border: 1px solid #00ff66; color: #00ff66; padding: 5px; width: 70px; border-radius: 4px; text-align: center; font-family: monospace; }
+        .lock-active { color: #ff3333; font-weight: bold; animation: blink 1.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+<div class="admin-wrapper">
+    <header>
+        <h1>[MASTER CONTROL PANEL]</h1>
+        <button class="btn btn-danger" onclick="adminLogout()">🔒 ログアウト</button>
+    </header>
+
+    <div class="sys-status-grid">
+        <div class="status-box">
+            <div>登録走者総数</div>
+            <div class="status-val" id="total-users-count">0</div>
+        </div>
+        <div class="status-box">
+            <div>進行中の公式試合</div>
+            <div class="status-val" id="active-games-count" style="color: #ffaa00;">0</div>
+        </div>
+        <div class="status-box">
+            <div>マッチング統制状況</div>
+            <div class="status-val" id="lock-status-text" style="color: #00ff66;">NORMAL</div>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <h3>🚨 緊急インフラ統制コマンド</h3>
+        <p style="color: #aaa; font-size: 13px; margin: 0 0 15px 0;">
+            公式マッチングを緊急停止します。オンにすると一般走者は対戦のエントリーを行えなくなります（開発中・メンテナンス用）。
+        </p>
+        <button class="btn btn-toggle" id="lock-toggle-btn" onclick="toggleMatchingLock()">マッチング緊急ロック始動</button>
+    </div>
+
+    <h3>👥 登録走者マスターデータベース</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>走者識別名</th>
+                <th>現在のレート</th>
+                <th>称号ランク</th>
+                <th>戦績 (勝/敗)</th>
+                <th>神のレート改変</th>
+                <th>最高死刑執行</th>
+            </tr>
+        </thead>
+        <tbody id="user-table-body">
+            <tr>
+                <td colspan="6" style="text-align: center; color: #666;">データを同期中...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const socket = io();
+    const token = localStorage.getItem('admin_token');
+
+    // 読み込み時に通行証がなければ一瞬でトップへ叩き落とす
+    if (!token) {
+        alert("ACCESS DENIED: 管理者トークンがありません。");
+        location.href = '/';
+    }
+
+    // サーバーに管理者用の通行証を提出して同期要請
+    socket.on('connect', () => {
+        socket.emit('admin_auth', { token: token });
+    });
+
+    // 初期化データの受け取り
+    socket.on('admin_init_res', (res) => {
+        if (!res.success) {
+            alert(res.msg);
+            adminLogout();
+            return;
+        }
+        renderUserList(res.users);
+        updateLockUI(res.isMatchingLocked);
+        document.getElementById('active-games-count').innerText = res.activeGamesCount;
+    });
+
+    // リアルタイム更新の受け取り
+    socket.on('admin_update_list', (data) => {
+        renderUserList(data.users);
+        document.getElementById('active-games-count').innerText = data.activeGamesCount;
+    });
+
+    socket.on('admin_lock_status', (data) => {
+        updateLockUI(data.isMatchingLocked);
+    });
+
+    // リストの描画処理
+    function renderUserList(users) {
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = '';
+        document.getElementById('total-users-count').innerText = users.length;
+
+        if(users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#666;">登録走者はまだいません。</td></tr>`;
+            return;
+        }
+
+        users.forEach(user => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight: bold; color: #fff;">${user.username}</td>
+                <td style="font-family: monospace; color: #ff4757;">${user.rate} pt</td>
+                <td><span style="border: 1px solid #555; padding: 2px 6px; border-radius:3px; font-size:11px;">${user.rank}</span></td>
+                <td>${user.win}勝 / ${user.lose}敗</td>
+                <td>
+                    <input type="number" class="rate-input" id="rate-of-${user.username}" value="${user.rate}">
+                    <button class="btn" onclick="executeRateChange('${user.username}')">改変</button>
+                </td>
+                <td>
+                    <button class="btn btn-danger" onclick="executeBan('${user.username}')">永久追放(BAN)</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // マッチングロックのUI更新
+    function updateLockUI(isLocked) {
+        const txt = document.getElementById('lock-status-text');
+        const btn = document.getElementById('lock-toggle-btn');
+        if (isLocked) {
+            txt.innerText = "LOCKED (緊急停止中)";
+            txt.className = "status-val lock-active";
+            btn.innerText = "🔓 ロックを解除して通常運転に戻す";
+            btn.style.background = "#00ff66";
+            btn.style.color = "#000";
+        } else {
+            txt.innerText = "OPERATIONAL (正常)";
+            txt.className = "status-val";
+            txt.style.color = "#00ff66";
+            btn.innerText = "🔒 マッチングを緊急ロックする";
+            btn.style.background = "#ff3333";
+            btn.style.color = "#fff";
+        }
+    }
+
+    // 特権コマンドの送信
+    function executeRateChange(username) {
+        const val = document.getElementById(`rate-of-${username}`).value;
+        if(confirm(`${username} のレートを強制的に ${val}pt に改変しますか？`)) {
+            socket.emit('admin_change_rate', { targetUser: username, newRate: val });
+        }
+    }
+
+    function executeBan(username) {
+        if(confirm(`⚠️警告: 走者 [${username}] をデータベースから物理削除し、永久追放します。よろしいですか？`)) {
+            socket.emit('admin_ban_user', { targetUser: username });
+        }
+    }
+
+    function toggleMatchingLock() {
+        socket.emit('admin_toggle_lock');
+    }
+
+    function adminLogout() {
+        localStorage.removeItem('admin_token');
+        location.href = '/';
+    }
+</script>
+</body>
+</html>
