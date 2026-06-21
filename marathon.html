@@ -309,7 +309,7 @@
             
             alert(`${msg}\n最新レート: ${result.newRate} pt (${result.newRank})`);
             clearAllBackup();
-            location.href = '/portal.html'; // ポータル画面ロビーへ凱旋帰還
+            location.href = '/'; // ポータル画面ロビーへ凱旋帰還
         });
     }
 
@@ -571,12 +571,12 @@
             updateLaneColor('lane-p1', s.p1.temp); updateLaneColor('lane-p2', s.p2.temp);
             updateDebtBadge('debt-p1', s.p1.debt); updateDebtBadge('debt-p2', s.p2.debt);
 
-            if(s.p1.progress >= 1000 || s.p2.progress >= 1000) { alert(s.p1.progress >= s.p2.progress ? "勝利！" : "敗北！"); location.href = '/portal.html'; return; }
+            if(s.p1.progress >= 1000 || s.p2.progress >= 1000) { alert(s.p1.progress >= s.p2.progress ? "勝利！" : "敗北！"); location.href = '/'; return; }
             eventReserved = false; document.getElementById('evt-btn').disabled = false; unlockScreen(); setupHandAndBoxes(); startTimer(300);
         }, 2500);
     }
 
-    function backToPlatformLobby() { clearAllBackup(); location.href = '/portal.html'; }
+    function backToPlatformLobby() { clearAllBackup(); location.href = '/'; }
     function clearAllBackup() { localStorage.removeItem('marathon_mode'); }
 </script>
 </body>
