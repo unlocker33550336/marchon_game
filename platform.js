@@ -479,13 +479,14 @@ async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
     
-    // 🌟 指定のあった接続用アドレスへピンポイントで完全置換
-    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2.4vbxzmx.mongodb.net/test?appName=Cluster0', {
+    // 🌟【修正完了】@cluster0 を正しい位置に完全復活させました！
+    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
     
     console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
 
+    // 接続が成功して、初めてポートを開放する
     server.listen(PORT, () => {
         console.log(`=======================================================`);
         console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
@@ -498,4 +499,5 @@ async function startSecurePlatform() {
   }
 }
 
+// 起動シーケンス実行
 startSecurePlatform();
