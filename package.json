@@ -1,14 +1,11 @@
 {
-  "name": "the-marathon",
+  "name": "the-marathon-platform",
   "version": "1.0.0",
-  "main": "server.js",
+  "description": "Multi-game platform hub",
+  "main": "platform.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node platform.js"
   },
-  "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
-  }
   "dependencies": {
     "express": "^4.19.2",
     "mongoose": "^8.4.1",
