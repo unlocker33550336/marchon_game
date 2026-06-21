@@ -11,15 +11,8 @@ const io = new Server(server);
 const PORT = 3000;
 
 // ==========================================
-// 1. データベース（MongoDB）接続と共通スキーマ
+// 1. 共通スキーマ定義
 // ==========================================
-console.log('[DB CONNECT ATTEMPT] MongoDBへの接続を開始します...');
-console.log('-> 接続URIの有無:', process.env.MONGODB_URI ? "設定あり(OK)" : "設定なし(⚠️空っぽです)");
-
-mongoose.connect('mongodb+srv://gaohu1870_db_user:db_9logZ3FdhBWow37K@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0')
-  .then(() => console.log('✅ [DB SUCCESS] Platform Hub DB connected successfully'))
-  .catch(err => console.error('❌ [DB CRITICAL ERROR] Platform Hub DB connection error:', err));
-
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
   password: { type: String, required: true },
@@ -96,7 +89,7 @@ async function processPlatformRate(username, isWin, resultType) {
 app.use(express.static(__dirname));
 
 // ==========================================
-// 3. Socket.io 通信ハブゲート（受け皿）
+// 3. Socket.io 通信ハブゲート
 // ==========================================
 io.on('connection', (socket) => {
     console.log(`[SOCKET CONNECTED] 新しい回線が確立されました (SocketID: ${socket.id})`);
@@ -124,7 +117,6 @@ io.on('connection', (socket) => {
             console.log(`✅ [REGISTER SUCCESS] ユーザー [${username}] の作成が完了しました`);
             socket.emit('register_res', { success: true, msg: "中央システムへの走者登録が完了しました！" });
         } catch (err) {
-            // ❌ ここがハッキリログに出るようになる！
             console.error('❌ [REGISTER CRASH] 新規登録処理中にエラーが発生しました:', err);
             socket.emit('register_res', { success: false, msg: "サーバーエラー（DB書き込み失敗）" });
         }
@@ -229,10 +221,7 @@ io.on('connection', (socket) => {
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        
-        if (roomId) {
-            socket.to(roomId).emit('game_packet_receive', data);
-        }
+        if (roomId) { socket.to(roomId).emit('game_packet_receive', data); }
     });
 
     // 【チャット】
@@ -244,9 +233,7 @@ io.on('connection', (socket) => {
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        if (roomId) {
-            io.to(roomId).emit('receive_chat', msg);
-        }
+        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
     });
 
     // 【ゲーム終了申告】
@@ -360,7 +347,7 @@ io.on('connection', (socket) => {
 });
 
 // ==========================================
-// 4. ゲーム別・独立型汎用マッチングシステムループ
+// 4. マッチングシステムループ
 // ==========================================
 setInterval(async () => {
     for (let gameId in gameQueues) {
@@ -371,39 +358,54 @@ setInterval(async () => {
         let p2 = queue.shift();
 
         let roomId = `room_${gameId}_${p1.username}_${p2.username}_${Date.now()}`;
-        console.log(`⚔️ [MATCH FOUND] ゲーム [${gameId}] で試合が成立しました！部屋ID: ${roomId} (${p1.username} vs ${p2.username})`);
+        console.log(`⚔️ [MATCH FOUND] 試合成立しました！部屋ID: ${roomId} (${p1.username} vs ${p2.username})`);
         
         p1.socket.join(roomId);
         p2.socket.join(roomId);
 
-        activeGames[roomId] = {
-            gameId: gameId,
-            p1: p1.username,
-            p2: p2.username,
-            isProcessingResult: false,
-            state: {}
-        };
+        activeGames[roomId] = { gameId: gameId, p1: p1.username, p2: p2.username, isProcessingResult: false, state: {} };
 
         p1.socket.emit('platform_match_found', {
-            roomId: roomId,
-            gameId: gameId,
-            myRole: 1,
+            roomId: roomId, gameId: gameId, myRole: 1,
             p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
             p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
         });
 
         p2.socket.emit('platform_match_found', {
-            roomId: roomId,
-            gameId: gameId,
-            myRole: 2,
+            roomId: roomId, gameId: gameId, myRole: 2,
             p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
             p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
         });
     }
 }, 1000);
 
-server.listen(PORT, () => {
-    console.log(`=======================================================`);
-    console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
-    console.log(`=======================================================`);
-});
+// ==========================================
+// 5. 【超重要】同期型・データベース接続＆サーバー起動システム
+// ==========================================
+async function startSecurePlatform() {
+  try {
+    console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
+    
+    // フライング防止のため、バッファリングを強制無効化
+    await mongoose.connect('mongodb+srv://gaohu1870_db_user:db_9logZ3FdhBWow37K@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
+      bufferCommands: false
+    });
+    
+    console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
+
+    // 接続が100%成功したあとで、初めてポートを開放してWebアクセスを許可する
+    server.listen(PORT, () => {
+        console.log(`=======================================================`);
+        console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
+        console.log(`=======================================================`);
+    });
+
+  } catch (err) {
+    // もし接続自体に失敗したら、ここで原因の息の根を止めるログを吐き出す
+    console.error('❌ [DB CRITICAL ERROR] データベース接続に失敗したため、サーバーの起動を非常停止しました:');
+    console.error(err);
+  }
+}
+
+// 起動シーケンス実行
+startSecurePlatform();
