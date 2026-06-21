@@ -10,6 +10,11 @@ const io = new Server(server);
 
 const PORT = 3000;
 
+// 管理者用の秘密の合言葉（簡易トークン）
+const ADMIN_SECRET = "THE_MARATHON_GM_SECRET_2026";
+// マッチング緊急ロックフラグ
+let isMatchingLocked = false;
+
 // ==========================================
 // 1. 共通スキーマ定義
 // ==========================================
@@ -36,9 +41,9 @@ let reconnectTimers = {};
 // 2. 共通レート計算システム ＆ ランク判定
 // ==========================================
 function getRank(rate) {
-  if (rate >= 20000) return "VIP";
-  else if (rate >= 15000) return "PREMIUM";
-  else if (rate >= 5000) return "ELITE";
+  if (rate >= 2000) return "VIP";
+  else if (rate >= 1500) return "PREMIUM";
+  else if (rate >= 500) return "ELITE";
   else return "NORMAL";
 }
 
@@ -88,11 +93,81 @@ async function processPlatformRate(username, isWin, resultType) {
 
 app.use(express.static(__dirname));
 
+// 管理者画面用のルーティングを明示的に許可
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 // ==========================================
 // 3. Socket.io 通信ハブゲート
 // ==========================================
 io.on('connection', (socket) => {
     console.log(`[SOCKET CONNECTED] 新しい回線が確立されました (SocketID: ${socket.id})`);
+
+    // 【管理者：認証チェック ＆ 情報送出】
+    socket.on('admin_auth', async (data) => {
+        if (data && data.token === ADMIN_SECRET) {
+            socket.join('admin_room');
+            console.log(`⚡ [GM CONNECTED] 管理者がコントロールパネルに同期しました。`);
+            
+            try {
+                const allUsers = await User.find({}, { password: 0 });
+                socket.emit('admin_init_res', {
+                    success: true,
+                    users: allUsers,
+                    isMatchingLocked: isMatchingLocked,
+                    activeGamesCount: Object.keys(activeGames).length
+                });
+            } catch (e) {
+                socket.emit('admin_init_res', { success: false, msg: "ユーザーリストの取得に失敗" });
+            }
+        } else {
+            socket.emit('admin_init_res', { success: false, msg: "不正なトークンです。閲覧権限がありません。" });
+        }
+    });
+
+    // 【管理者特権：神のレート改変】
+    socket.on('admin_change_rate', async (data) => {
+        if (!socket.rooms.has('admin_room')) return;
+        const { targetUser, newRate } = data;
+        try {
+            const user = await User.findOne({ username: targetUser });
+            if (user) {
+                user.rate = parseInt(newRate) || 0;
+                user.rank = getRank(user.rate);
+                await user.save();
+                console.log(`⚡ [GM ACTION] ${targetUser} のレートを ${newRate}pt に書き換えました。`);
+                
+                const allUsers = await User.find({}, { password: 0 });
+                io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
+            }
+        } catch (e) {
+            console.error("レート神改変エラー:", e);
+        }
+    });
+
+    // 【管理者特権：走者BAN（データ物理削除）】
+    socket.on('admin_ban_user', async (data) => {
+        if (!socket.rooms.has('admin_room')) return;
+        const { targetUser } = data;
+        try {
+            await User.deleteOne({ username: targetUser });
+            console.log(`🚨 [GM ACTION] ユーザー [${targetUser}] をプラットフォームから永久追放しました。`);
+            
+            const allUsers = await User.find({}, { password: 0 });
+            io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
+        } catch (e) {
+            console.error("BAN執行エラー:", e);
+        }
+    });
+
+    // 【管理者特権：マッチング緊急ロック切り替え】
+    socket.on('admin_toggle_lock', () => {
+        if (!socket.rooms.has('admin_room')) return;
+        isMatchingLocked = !isMatchingLocked;
+        console.log(`⚡ [GM ACTION] マッチングロック状態を切り替えました: ${isMatchingLocked}`);
+        io.to('admin_room').emit('admin_lock_status', { isMatchingLocked: isMatchingLocked });
+    });
 
     // 【新規登録】
     socket.on('register', async (data) => {
@@ -100,15 +175,16 @@ io.on('connection', (socket) => {
         const { username, password } = data;
         
         if (!username || !password) {
-            console.log('-> [REGISTER REJECTED] ユーザー名またはパスワードが空です');
             return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
+        }
+        if (username.toLowerCase() === 'admin') {
+            return socket.emit('register_res', { success: false, msg: "その識別名はシステム予約済みです" });
         }
         
         try {
             console.log(`-> [DB QUERY] 既存のユーザー [${username}] を検索中...`);
             const exists = await User.findOne({ username });
             if (exists) {
-                console.log(`-> [REGISTER REJECTED] ユーザー名 [${username}] は既に使用されています`);
                 return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
             }
             
@@ -127,6 +203,20 @@ io.on('connection', (socket) => {
         console.log('[SIGNAL RECEIVED] login イベントを受信しました:', data ? data.username : "データなし");
         const { username, password, token } = data;
         
+        if (username === 'admin') {
+            if (password === 'adminpassword' || token === ADMIN_SECRET) {
+                console.log(`⚡ [ADMIN LOGIN SUCCESS] 管理者権限を識別。裏口トークンを発行します。`);
+                return socket.emit('login_res', { 
+                    success: true, 
+                    username: 'admin', 
+                    isAdmin: true, 
+                    token: ADMIN_SECRET 
+                });
+            } else {
+                return socket.emit('login_res', { success: false, msg: "管理者パスワードが不正です" });
+            }
+        }
+
         try {
             console.log(`-> [DB QUERY] ユーザー [${username}] の認証情報を検索中...`);
             const user = await User.findOne({ username });
@@ -146,7 +236,7 @@ io.on('connection', (socket) => {
                     });
                 }
             }
-            console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました（パスワード不一致またはユーザーなし）`);
+            console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました`);
             socket.emit('login_res', { success: false, msg: "走者識別名またはパスワードが不正です" });
         } catch (err) {
             console.error('❌ [LOGIN CRASH] ログイン処理中にエラーが発生しました:', err);
@@ -165,6 +255,10 @@ io.on('connection', (socket) => {
 
     // 【マッチングエントリー】
     socket.on('join_matchmaking', async (data) => {
+        if (isMatchingLocked) {
+            return socket.emit('matchmaking_error', { msg: "現在サーバーメンテナンスのため、公式マッチングの受付は一時的にロックされています。" });
+        }
+
         const username = socketUserMap[socket.id];
         if (!username) return socket.emit('matchmaking_error', { msg: "セッションが切断されています。再ログインしてください" });
 
@@ -187,7 +281,7 @@ io.on('connection', (socket) => {
             const user = await User.findOne({ username });
             if (user) { userRate = user.rate; userRank = user.rank; }
         } catch (e) {
-            console.error("[QUEUE DB WARNING] マッチング時のレート取得に失敗、初期値で並びます:", e);
+            console.error("[QUEUE DB WARNING] マッチング時のレート取得に失敗:", e);
         }
 
         gameQueues[gameId].push({
@@ -248,7 +342,7 @@ io.on('connection', (socket) => {
         if (!roomId) return console.log('-> [ERROR] 該当するアクティブな部屋が見つかりません');
         const game = activeGames[roomId];
 
-        if (game.isProcessingResult) return console.log('-> [WARNING] 既にリザルト計算が実行中です。重複処理を回避します');
+        if (game.isProcessingResult) return console.log('-> [WARNING] 既にリザルト計算が実行中です');
         game.isProcessingResult = true;
 
         const { winnerUsername, resultType } = data;
@@ -295,7 +389,7 @@ io.on('connection', (socket) => {
     // 【切断】
     socket.on('disconnect', () => {
         const username = socketUserMap[socket.id];
-        console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"} (ID: ${socket.id})`);
+        console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
         
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
@@ -313,7 +407,6 @@ io.on('connection', (socket) => {
                         user.lose += 1;
                         user.rank = getRank(user.rate);
                         await user.save();
-                        console.log(`-> ペナルティ完了: ${username} 新レート ${user.rate} pt`);
                     }
                 } catch (e) {
                     console.error("ペナルティDB更新中にエラー:", e);
@@ -378,21 +471,21 @@ setInterval(async () => {
         });
     }
 }, 1000);
+
 // ==========================================
-// 5. 【超重要】同期型・データベース接続＆サーバー起動システム
+// 5. 同期型・データベース接続＆サーバー起動システム
 // ==========================================
 async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
     
-    // ⬇️ 修正するのはこの1行だけ！新しく変えたパスワードをここに入れる
-    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
+    // 🌟 指定のあった接続用アドレスへピンポイントで完全置換
+    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
     
     console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
 
-    // 接続が100%成功したあとで、初めてポートを開放してWebアクセスを許可する
     server.listen(PORT, () => {
         console.log(`=======================================================`);
         console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
@@ -405,5 +498,4 @@ async function startSecurePlatform() {
   }
 }
 
-// 起動シーケンス実行
 startSecurePlatform();
