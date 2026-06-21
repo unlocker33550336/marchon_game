@@ -13,15 +13,17 @@ const PORT = 3000;
 // ==========================================
 // 1. データベース（MongoDB）接続と共通スキーマ
 // ==========================================
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Platform Hub DB connected successfully'))
-  .catch(err => console.error('Platform Hub DB connection error:', err));
+console.log('[DB CONNECT ATTEMPT] MongoDBへの接続を開始します...');
+console.log('-> 接続URIの有無:', process.env.MONGODB_URI ? "設定あり(OK)" : "設定なし(⚠️空っぽです)");
 
-// すべてのゲームで一元化して共有される、唯一無二のユーザーデータ設計図
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ [DB SUCCESS] Platform Hub DB connected successfully'))
+  .catch(err => console.error('❌ [DB CRITICAL ERROR] Platform Hub DB connection error:', err));
+
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
   password: { type: String, required: true },
-  rate: { type: Number, default: 100 }, // 初期レートは確実に「100」からスタート
+  rate: { type: Number, default: 100 },
   rank: { type: String, default: "NORMAL" },
   win: { type: Number, default: 0 },
   lose: { type: Number, default: 0 },
@@ -31,70 +33,64 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// 🌐 ネットの瞬きや再接続によるパケット迷子を完全に防ぐ不変のセッションマップ
-let userSocketMap = {}; // username -> 最新のsocket.id
-let socketUserMap = {}; // socket.id -> username
-
-// ゲームごとの待機列を格納する多重配列オブジェクト (例: { marathon: [], othello: [] })
+let userSocketMap = {}; 
+let socketUserMap = {}; 
 let gameQueues = {};
-
-// サイト内で現在進行しているすべての対戦部屋データ
 let activeGames = {};
-
-// プレイヤーの安否を待つ切断復帰タイマー
 let reconnectTimers = {};
 
 // ==========================================
 // 2. 共通レート計算システム ＆ ランク判定
 // ==========================================
-
-// 共通ランク再判定ロジック
 function getRank(rate) {
-  if (rate >= 2000) return "VIP";
-  else if (rate >= 1500) return "PREMIUM";
-  else if (rate >= 500) return "ELITE";
+  if (rate >= 20000) return "VIP";
+  else if (rate >= 15000) return "PREMIUM";
+  else if (rate >= 5000) return "ELITE";
   else return "NORMAL";
 }
 
-// 君のノートのオリジナル設計：ランク帯が上がるほど負けた時のペナルティが激重になる数式
 function getLosePenalty(rank) {
   if (rank === "VIP") return 250;
   if (rank === "PREMIUM") return 180;
   if (rank === "ELITE") return 100;
-  return 30; // NORMAL帯の敗北は軽めの30
+  return 30;
 }
 
-// 共通レート更新の受付窓口（どのゲームの決着でもここを通す）
 async function processPlatformRate(username, isWin, resultType) {
-  const user = await User.findOne({ username });
-  if (!user || username === 'admin') return { rateChange: 0, currentRate: 100, currentRank: "NORMAL" };
+  console.log(`[RATE UPDATE] レート計算開始: ${username} | 勝利フラグ: ${isWin} | 終了タイプ: ${resultType}`);
+  try {
+    const user = await User.findOne({ username });
+    if (!user || username === 'admin') return { rateChange: 0, currentRate: 100, currentRank: "NORMAL" };
 
-  let oldRate = user.rate;
+    let oldRate = user.rate;
 
-  if (isWin) {
-    let change = 0;
-    // ゲームの勝ち方ボーナス種別、あるいはデフォルトの加算判定
-    if (resultType === 'goal') change = 300;
-    else if (resultType === 'immobilize') change = 150;
-    else change = 50; // 通常の勝利や軽いミニゲームの基本値
-    
-    user.win += 1;
-    user.rate = user.rate + change;
-  } else {
-    // 敗北時は現在のランクに応じたオリジナルペナルティを厳格に適用
-    let penalty = getLosePenalty(user.rank);
-    user.lose += 1;
-    user.rate = Math.max(0, user.rate - penalty);
+    if (isWin) {
+      let change = 0;
+      if (resultType === 'goal') change = 300;
+      else if (resultType === 'immobilize') change = 150;
+      else change = 50;
+      
+      user.win += 1;
+      user.rate = user.rate + change;
+    } else {
+      let penalty = getLosePenalty(user.rank);
+      user.lose += 1;
+      user.rate = Math.max(0, user.rate - penalty);
+    }
+
+    user.rank = getRank(user.rate);
+    await user.save();
+    console.log(`-> レート計算完了: ${username} [新レート: ${user.rate} pt / 新ランク: ${user.rank}]`);
+
+    return {
+      rateChange: Math.abs(user.rate - oldRate),
+      currentRate: user.rate,
+      currentRank: user.rank
+    };
+  } catch (err) {
+    console.error(`❌ [RATE UPDATE CRASH] ${username} のレート更新中に深刻なエラー:`, err);
+    return { rateChange: 0, currentRate: 100, currentRank: "NORMAL" };
   }
-
-  user.rank = getRank(user.rate);
-  await user.save();
-
-  return {
-    rateChange: Math.abs(user.rate - oldRate),
-    currentRate: user.rate,
-    currentRank: user.rank
-  };
 }
 
 app.use(express.static(__dirname));
@@ -103,36 +99,51 @@ app.use(express.static(__dirname));
 // 3. Socket.io 通信ハブゲート（受け皿）
 // ==========================================
 io.on('connection', (socket) => {
+    console.log(`[SOCKET CONNECTED] 新しい回線が確立されました (SocketID: ${socket.id})`);
 
-    // 【認証システム】新規アカウント登録
+    // 【新規登録】
     socket.on('register', async (data) => {
+        console.log('[SIGNAL RECEIVED] register イベントを受信しました:', data);
         const { username, password } = data;
+        
         if (!username || !password) {
+            console.log('-> [REGISTER REJECTED] ユーザー名またはパスワードが空です');
             return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
         }
+        
         try {
+            console.log(`-> [DB QUERY] 既存のユーザー [${username}] を検索中...`);
             const exists = await User.findOne({ username });
-            if (exists) return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
+            if (exists) {
+                console.log(`-> [REGISTER REJECTED] ユーザー名 [${username}] は既に使用されています`);
+                return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
+            }
             
+            console.log(`-> [DB INSERT] 新しいユーザー [${username}] を書き込み中...`);
             await User.create({ username, password, rate: 100, rank: "NORMAL", win: 0, lose: 0 });
+            console.log(`✅ [REGISTER SUCCESS] ユーザー [${username}] の作成が完了しました`);
             socket.emit('register_res', { success: true, msg: "中央システムへの走者登録が完了しました！" });
         } catch (err) {
-            socket.emit('register_res', { success: false, msg: "サーバーエラー" });
+            // ❌ ここがハッキリログに出るようになる！
+            console.error('❌ [REGISTER CRASH] 新規登録処理中にエラーが発生しました:', err);
+            socket.emit('register_res', { success: false, msg: "サーバーエラー（DB書き込み失敗）" });
         }
     });
 
-    // 【認証システム】ログイン ＆ 【ロビーポータル画面情報返却】
+    // 【ログイン】
     socket.on('login', async (data) => {
+        console.log('[SIGNAL RECEIVED] login イベントを受信しました:', data ? data.username : "データなし");
         const { username, password, token } = data;
+        
         try {
+            console.log(`-> [DB QUERY] ユーザー [${username}] の認証情報を検索中...`);
             const user = await User.findOne({ username });
             if (user) {
                 if ((token && user.password === token) || (password && user.password === password)) {
-                    // 回線セッションの古いゴミデータを上書き修復
                     userSocketMap[username] = socket.id;
                     socketUserMap[socket.id] = username;
                     
-                    // 認証成功と同時に、共通ロビー画面に必要な最新ステータスをすべてまとめて叩き返す
+                    console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
                     return socket.emit('login_res', { 
                         success: true, 
                         username, 
@@ -143,31 +154,34 @@ io.on('connection', (socket) => {
                     });
                 }
             }
+            console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました（パスワード不一致またはユーザーなし）`);
             socket.emit('login_res', { success: false, msg: "走者識別名またはパスワードが不正です" });
         } catch (err) {
+            console.error('❌ [LOGIN CRASH] ログイン処理中にエラーが発生しました:', err);
             socket.emit('login_res', { success: false, msg: "サーバー接続エラー" });
         }
     });
 
-    // 【認証システム】ゲストモード入場
+    // 【ゲストログイン】
     socket.on('login_guest', () => {
         let guestName = "Guest_" + Math.floor(1000 + Math.random() * 9000);
         userSocketMap[guestName] = socket.id;
         socketUserMap[socket.id] = guestName;
+        console.log(`👤 [GUEST ENTER] ゲスト [${guestName}] が入場しました`);
         socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
     });
 
-    // 【汎用マッチングシステム】エントリー窓口
+    // 【マッチングエントリー】
     socket.on('join_matchmaking', async (data) => {
         const username = socketUserMap[socket.id];
         if (!username) return socket.emit('matchmaking_error', { msg: "セッションが切断されています。再ログインしてください" });
 
-        const { gameId } = data; // 画面側から「どのゲームの列に並びたいか」を文字列でもらう (例: 'marathon', 'cards')
-        if (!gameId) return socket.emit('matchmaking_error', { msg: "対象のゲーム種別IDが不明です" });
+        const { gameId } = data;
+        console.log(`[QUEUE ATTEMPT] ${username} がゲーム [${gameId}] の待機列にエントリーを要求`);
 
+        if (!gameId) return socket.emit('matchmaking_error', { msg: "対象のゲーム種別IDが不明です" });
         if (!gameQueues[gameId]) { gameQueues[gameId] = []; }
 
-        // 多重エントリー（他のゲームの列との重複並び）を完全にブロックする
         let isAlreadyQueued = false;
         for (let gId in gameQueues) {
             if (gameQueues[gId].some(w => w.username === username)) { isAlreadyQueued = true; break; }
@@ -177,10 +191,13 @@ io.on('connection', (socket) => {
         let userRate = 100;
         let userRank = "NORMAL";
 
-        const user = await User.findOne({ username });
-        if (user) { userRate = user.rate; userRank = user.rank; }
+        try {
+            const user = await User.findOne({ username });
+            if (user) { userRate = user.rate; userRank = user.rank; }
+        } catch (e) {
+            console.error("[QUEUE DB WARNING] マッチング時のレート取得に失敗、初期値で並びます:", e);
+        }
 
-        // 各ゲーム個別のカゴ（キュー）へ選別して整列させる
         gameQueues[gameId].push({
             id: socket.id,
             username: username,
@@ -189,19 +206,21 @@ io.on('connection', (socket) => {
             socket: socket
         });
 
+        console.log(`-> [QUEUE SUCCESS] ${username} が [${gameId}] のカゴに入りました (現在の待機人数: ${gameQueues[gameId].length}人)`);
         socket.emit('matchmaking_started', { gameId });
     });
 
-    // 【汎用マッチングシステム】キャンセル窓口
+    // 【マッチングキャンセル】
     socket.on('leave_matchmaking', () => {
+        const username = socketUserMap[socket.id] || "未知のユーザー";
+        console.log(`[QUEUE CANCEL] ${username} が待機列から離脱しました`);
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         socket.emit('matchmaking_stopped');
     });
 
-    // 【ゲーム間完全分離型・中継転送窓口】
-    // どんなゲームを追加しても、対戦中のアクションやパケットはすべてこのイベントを中継して相手に横流しされる
+    // 【ゲームデータパケット中継】
     socket.on('game_packet', (data) => {
         const username = socketUserMap[socket.id];
         if (!username) return;
@@ -212,12 +231,11 @@ io.on('connection', (socket) => {
         }
         
         if (roomId) {
-            // 同じ部屋にいる対戦相手の画面だけにデータを転送
             socket.to(roomId).emit('game_packet_receive', data);
         }
     });
 
-    // 💬 プラットフォーム共通：チャット転送窓口
+    // 【チャット】
     socket.on('send_chat', (msg) => {
         let roomId = null;
         const username = socketUserMap[socket.id];
@@ -231,25 +249,22 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 【共通レート更新受付イベント窓口】
-    // 各ゲームモジュールが終了を検知した瞬間に、この窓口を呼び出して共通レートを書き換える
+    // 【ゲーム終了申告】
     socket.on('submit_game_end', async (data) => {
         const username = socketUserMap[socket.id];
-        if (!username) return;
+        console.log(`[GAME END SIGNAL] ${username} から勝敗確定要求を受信:`, data);
 
         let roomId = null;
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        if (!roomId) return;
+        if (!roomId) return console.log('-> [ERROR] 該当するアクティブな部屋が見つかりません');
         const game = activeGames[roomId];
 
-        // 2人の画面から同時にリクエストが届いても、二重計算が起きないようにガッチリ防壁ロック
-        if (game.isProcessingResult) return;
+        if (game.isProcessingResult) return console.log('-> [WARNING] 既にリザルト計算が実行中です。重複処理を回避します');
         game.isProcessingResult = true;
 
         const { winnerUsername, resultType } = data;
-
         let p1Name = game.p1;
         let p2Name = game.p2;
         let p1Result = null;
@@ -269,7 +284,6 @@ io.on('connection', (socket) => {
         let p1SocketId = userSocketMap[p1Name];
         let p2SocketId = userSocketMap[p2Name];
 
-        // 最新の共通レートと変動幅をそれぞれのプレイヤーへダイレクトに配信
         if (p1SocketId) {
             io.to(p1SocketId).emit('platform_game_over', {
                 winner: winnerUsername,
@@ -287,26 +301,35 @@ io.on('connection', (socket) => {
             });
         }
 
+        console.log(`[ROOM DELETED] 部屋 ${roomId} のゲーム結果処理が完了したため削除します`);
         delete activeGames[roomId];
     });
 
-    // 回線切断・5分ペナルティ処理
+    // 【切断】
     socket.on('disconnect', () => {
         const username = socketUserMap[socket.id];
-        // 全待機キューから抹殺
+        console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"} (ID: ${socket.id})`);
+        
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         delete socketUserMap[socket.id];
 
         if (username && username !== 'admin' && !username.startsWith('Guest_')) {
+            console.log(`-> [RECONNECT TIMER] ${username} の5分間復帰待機タイマーを始動します`);
             reconnectTimers[username] = setTimeout(async () => {
-                const user = await User.findOne({ username });
-                if (user) {
-                    user.rate = Math.max(0, user.rate - 200); // 共通の切断ペナルティ
-                    user.lose += 1;
-                    user.rank = getRank(user.rate);
-                    await user.save();
+                console.log(`🚨 [TIMEOUT PENALTY] ${username} が5分以内に復帰しなかったため失格処理を執行します`);
+                try {
+                    const user = await User.findOne({ username });
+                    if (user) {
+                        user.rate = Math.max(0, user.rate - 200);
+                        user.lose += 1;
+                        user.rank = getRank(user.rate);
+                        await user.save();
+                        console.log(`-> ペナルティ完了: ${username} 新レート ${user.rate} pt`);
+                    }
+                } catch (e) {
+                    console.error("ペナルティDB更新中にエラー:", e);
                 }
 
                 let roomId = null;
@@ -340,29 +363,27 @@ io.on('connection', (socket) => {
 // 4. ゲーム別・独立型汎用マッチングシステムループ
 // ==========================================
 setInterval(async () => {
-    // 待機列が存在するゲーム種別を1つずつ順番に走査
     for (let gameId in gameQueues) {
         let queue = gameQueues[gameId];
         if (queue.length < 2) continue;
 
-        // そのゲームの待機列の先頭から2人を取り出す
         let p1 = queue.shift();
         let p2 = queue.shift();
 
         let roomId = `room_${gameId}_${p1.username}_${p2.username}_${Date.now()}`;
+        console.log(`⚔️ [MATCH FOUND] ゲーム [${gameId}] で試合が成立しました！部屋ID: ${roomId} (${p1.username} vs ${p2.username})`);
         
         p1.socket.join(roomId);
         p2.socket.join(roomId);
 
         activeGames[roomId] = {
-            gameId: gameId, // なんのゲームの部屋かを記録
+            gameId: gameId,
             p1: p1.username,
             p2: p2.username,
             isProcessingResult: false,
-            state: {} // 各ゲームが自由に変数を置いていい空枠のステータス領域
+            state: {}
         };
 
-        // 最初からお互いの実名・共通レート・共通ランクをフルオープンにしてゲーム起動信号を放つ
         p1.socket.emit('platform_match_found', {
             roomId: roomId,
             gameId: gameId,
@@ -382,5 +403,7 @@ setInterval(async () => {
 }, 1000);
 
 server.listen(PORT, () => {
-    console.log(`Platform Hub Server successfully running on port ${PORT}`);
+    console.log(`=======================================================`);
+    console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
+    console.log(`=======================================================`);
 });
