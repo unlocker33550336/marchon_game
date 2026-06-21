@@ -386,55 +386,74 @@ io.on('connection', (socket) => {
         delete activeGames[roomId];
     });
 
-    // 【切断】
+    // 【切断時の処理：ロビー連打を許容し、試合中の脱走者のみを処罰】
     socket.on('disconnect', () => {
         const username = socketUserMap[socket.id];
         console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
         
+        // 1. マッチング待機列に並んでいた場合は、安全にキューから削除
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         delete socketUserMap[socket.id];
 
+        // 2. 本物のプレイヤーアカウントのみを精査
         if (username && username !== 'admin' && !username.startsWith('Guest_')) {
-            console.log(`-> [RECONNECT TIMER] ${username} の5分間復帰待機タイマーを始動します`);
-            reconnectTimers[username] = setTimeout(async () => {
-                console.log(`🚨 [TIMEOUT PENALTY] ${username} が5分以内に復帰しなかったため失格処理を執行します`);
-                try {
-                    const user = await User.findOne({ username });
-                    if (user) {
-                        user.rate = Math.max(0, user.rate - 200);
-                        user.lose += 1;
-                        user.rank = getRank(user.rate);
-                        await user.save();
+            
+            // 🌟現在アクティブな「試合（部屋）」に参加中かどうかを厳密チェック
+            let isInGame = false;
+            let userRoomId = null;
+            for (let rId in activeGames) {
+                if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
+                    isInGame = true;
+                    userRoomId = rId;
+                    break;
+                }
+            }
+
+            // 🛑 試合中の場合のみペナルティタイマーをブートする
+            if (isInGame) {
+                console.log(`⚠️ [RECONNECT TIMER] 試合中走者 [${username}] の回線切断を検知。5分間の復帰待機タイマーを始動します。`);
+                
+                reconnectTimers[username] = setTimeout(async () => {
+                    console.log(`🚨 [TIMEOUT PENALTY] ${username} が5分以内に復帰しなかったため失格処理を執行します`);
+                    try {
+                        const user = await User.findOne({ username });
+                        if (user) {
+                            user.rate = Math.max(0, user.rate - 200);
+                            user.lose += 1;
+                            user.rank = getRank(user.rate);
+                            await user.save();
+                            console.log(`-> ペナルティDB更新完了: ${username} 新レート ${user.rate} pt / 1敗追加`);
+                        }
+                    } catch (e) {
+                        console.error("ペナルティDB更新中にエラー:", e);
                     }
-                } catch (e) {
-                    console.error("ペナルティDB更新中にエラー:", e);
-                }
 
-                let roomId = null;
-                for (let rId in activeGames) {
-                    if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
-                }
+                    // 対戦相手への自動勝利中継処理
+                    if (userRoomId && activeGames[userRoomId]) {
+                        const game = activeGames[userRoomId];
+                        let opponent = (game.p1 === username) ? game.p2 : game.p1;
+                        let oppSocketId = userSocketMap[opponent];
 
-                if (roomId && activeGames[roomId]) {
-                    const game = activeGames[roomId];
-                    let opponent = (game.p1 === username) ? game.p2 : game.p1;
-                    let oppSocketId = userSocketMap[opponent];
-
-                    let oppResult = await processPlatformRate(opponent, true, 'disconnect_win');
-                    if (oppSocketId) {
-                        io.to(oppSocketId).emit('platform_game_over', {
-                            winner: opponent,
-                            rateChange: oppResult.rateChange,
-                            newRate: oppResult.currentRate,
-                            newRank: oppResult.currentRank
-                        });
+                        let oppResult = await processPlatformRate(opponent, true, 'disconnect_win');
+                        if (oppSocketId) {
+                            io.to(oppSocketId).emit('platform_game_over', {
+                                winner: opponent,
+                                rateChange: oppResult.rateChange,
+                                newRate: oppResult.currentRate,
+                                newRank: oppResult.currentRank
+                            });
+                        }
+                        delete activeGames[userRoomId];
                     }
-                    delete activeGames[roomId];
-                }
-                delete reconnectTimers[username];
-            }, 5 * 60 * 1000);
+                    delete reconnectTimers[username];
+                }, 5 * 60 * 1000);
+
+            } else {
+                // 🌟 試合中でない（ロビーにいただけ）なら無傷で解放！
+                console.log(`-> [LOGOUT CLEARED] ${username} は非戦闘状態のため、安全に切断処理を行いました。`);
+            }
         }
     });
 });
@@ -479,14 +498,13 @@ async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
     
-    // 🌟【修正完了】@cluster0 を正しい位置に完全復活させました！
+    // 🌟 【修正完了】@cluster0 を正しい位置に完全復活させ、接続エラーを完全ブロック！
     await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
     
     console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
 
-    // 接続が成功して、初めてポートを開放する
     server.listen(PORT, () => {
         console.log(`=======================================================`);
         console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
@@ -499,5 +517,4 @@ async function startSecurePlatform() {
   }
 }
 
-// 起動シーケンス実行
 startSecurePlatform();
