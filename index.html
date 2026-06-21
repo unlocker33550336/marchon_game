@@ -135,7 +135,7 @@
         socket.on('login_res', (res) => {
             if (res.success) {
                 
-                // 🌟 【ここに追加マージ！】admin特権ログイン時の強制ルーティング分岐
+                // admin特権ログイン時の強制ルーティング分岐
                 if (res.isAdmin) {
                     localStorage.setItem('admin_token', res.token);
                     alert("【SYSTEM WARNING】管理者権限（GM）を検出。コントロールパネルへ遷移します。");
@@ -147,7 +147,8 @@
                 const pwd = document.getElementById('auth-password').value.trim();
                 if (pwd) localStorage.setItem('marathon_token', pwd);
 
-                document.getElementById('auth-panel').add('hidden');
+                // 🌟【バグ修正完了】classList.add に修正して画面ロックを完全解除！
+                document.getElementById('auth-panel').classList.add('hidden');
                 document.getElementById('lobby-panel').classList.remove('hidden');
 
                 document.getElementById('user-name').innerText = res.username;
@@ -175,6 +176,7 @@
         socket.emit('login', { username: u, password: p });
     }
 
+    // ユーザー名
     function register() {
         setupSocket();
         const u = document.getElementById('auth-username').value.trim();
