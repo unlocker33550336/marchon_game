@@ -11,6 +11,14 @@
         
         .lobby-panel { background: #1e1e1e; border: 2px solid #333; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 15px; }
         
+        /* 📜 ルール・イベント表示用スタイリッシュパネル */
+        .rule-dashboard { background: #15151a; border: 1px solid #2d2d3d; border-radius: 12px; padding: 20px; text-align: left; margin-top: 20px; max-height: 350px; overflow-y: auto; font-size: 13px; line-height: 1.6; color: #a0aec0; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        .rule-dashboard h3 { margin-top: 0; border-bottom: 1px solid #2d2d3d; padding-bottom: 6px; font-size: 15px; letter-spacing: 1px; }
+        .rule-dashboard p { margin: 0 0 12px 0; }
+        .rule-dashboard ul { margin: 0 0 12px 0; padding-left: 18px; }
+        .rule-dashboard li { margin-bottom: 6px; }
+        .rule-dashboard strong { color: #fff; }
+        
         .badge { padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-left: 5px; vertical-align: middle; }
         .rank-NORMAL { background: #747d8c; color: #fff; }
         .rank-ELITE { background: #2ed573; color: #fff; box-shadow: 0 0 8px rgba(46,213,115,0.4); }
@@ -84,6 +92,32 @@
         </div>
         <button class="action-btn" id="match-btn" onclick="toggleMatchmaking()" style="padding: 15px; font-size: 18px;">公式レート対戦マッチング開始</button>
         <button class="action-btn" onclick="startAIModeTrigger()" style="background: #10ac84; margin-top: 10px;">思考AI戦（練習モード）</button>
+
+        <div class="rule-dashboard">
+            <h3 style="color: #ff4757;">＜ルール＞</h3>
+            <p>これは、自分と敵（相手）のどちらがゴールできるのかのゲームです。</p>
+            <p>クリア条件は先にゴールすることです。<strong>5ターン1歩も進めなかったらゲームオーバー</strong>です。また、<strong>1ターンに5分以上をかけた場合は遅延行為で失格</strong>となります。</p>
+            <p>マラソンをしているあなたたちは様々な試練を乗り越えながらゴールを目指します。そして、その試練は全て自分達で用意します。</p>
+            <p>あなたたちには、4つのボックスが用意されています。そのボックスの中にカードを入れ、試練を与えていきます。4つのボックスはそれぞれ、<strong>自分用、相手用、廃棄用、保留用</strong>です。</p>
+            <ul>
+                <li><strong>自分用のボックス：</strong>カードを入れたら自分に効果が発動します。</li>
+                <li><strong>相手用のボックス：</strong>カードを入れたら相手に効果が発動します。</li>
+                <li><strong>廃棄用のボックス：</strong>使わないカードを入れてください。</li>
+                <li><strong>保留用のボックス：</strong>1枚のみカードを入れることができますが、保留用のボックスに入っているカードは次のターンに配られません。また、保留用に入ってるカードのみは取り出し可能です。</li>
+            </ul>
+            <p>毎ターンごとにカード（保留用ボックスに入ってるカード以外）を配っていきますので、<strong>毎ターン5分以内にカードをボックスに設置</strong>してください。カードの設置後、そのターンにどれだけ走れたのかを結果として表示いたします。</p>
+            <p>カードは全部で4種類あり、それぞれ<strong>水カード、石カード、太陽カード、応援カード</strong>です。</p>
+            <ul>
+                <li><strong>水カード：</strong>プレイヤーのボックスで発動した場合はプレイヤーに水分を与えます。</li>
+                <li><strong>石カード：</strong>プレイヤーのボックスで発動した場合はプレイヤーを妨害し、スピードを落とします。</li>
+                <li><strong>太陽カード：</strong>プレイヤーのボックスで発動した場合、プレイヤーの走っている環境の気温を上昇させます。</li>
+                <li><strong>応援カード：</strong>プレイヤーのボックスで発動した場合、プレイヤーを応援し、スピードを加速させます。</li>
+            </ul>
+            <p>初期の気温は<strong>5℃</strong>です。</p>
+
+            <h3 style="color: #ffa502; margin-top: 15px;">＜イベント＞</h3>
+            <p>各プレイヤーは<strong>開始から15ターン経過するとイベントを実行する権利</strong>が与えられます。イベントを実行したプレイヤーは、<strong>実行したターンから10ターン後にイベントを実行する権利が再び与えられます</strong>。</p>
+        </div>
     </div>
 
     <div id="matching-panel" class="lobby-panel hidden">
@@ -184,8 +218,6 @@
     window.onload = function() {
         const savedUser = localStorage.getItem('marathon_user');
         const savedToken = localStorage.getItem('marathon_token');
-        const savedMode = localStorage.getItem('marathon_mode');
-
         if (savedUser && savedToken) {
             myUsername = savedUser;
             document.getElementById('room-username').innerText = savedUser;
@@ -233,16 +265,14 @@
             document.getElementById('lobby-panel').classList.remove('hidden');
         });
 
-        // 🌟 大枠システムの「最初から実名オープン仕様」を受け取るトリガー
         socket.on('platform_match_found', (data) => {
-            if(data.gameId !== 'marathon') return; // 他のゲームの通知ならスルー
+            if(data.gameId !== 'marathon') return; 
             
             isMatching = false;
             clearInterval(matchTimerInterval);
             document.getElementById('matching-panel').classList.add('hidden');
             document.getElementById('game-area').style.display = 'block';
 
-            // 最初から実名とレートを画面に完全マージ
             document.getElementById('p1-name-card').innerText = data.p1.username;
             document.getElementById('p1-rate-card').innerText = `[${data.p1.rate}pt]`;
             document.getElementById('p2-name-card').innerText = data.p2.username;
@@ -301,7 +331,6 @@
             }, 2500); 
         });
 
-        // 🌟 プラットフォーム共通レート窓口からのゲームオーバーリザルト受信
         socket.on('platform_game_over', (result) => {
             clearInterval(timerInterval); lockScreen();
             let msg = (result.winner === myUsername) ? `【大勝利】共通レート変動: +${result.rateChange} pt` : `【敗北】共通レート変動: -${result.rateChange} pt`;
@@ -309,13 +338,13 @@
             
             alert(`${msg}\n最新レート: ${result.newRate} pt (${result.newRank})`);
             clearAllBackup();
-            location.href = '/'; // ポータル画面ロビーへ凱旋帰還
+            location.href = '/';
         });
     }
 
     function toggleMatchmaking() {
         if (!isMatching) {
-            socket.emit('join_matchmaking', { gameId: 'marathon' }); // 大枠システムへIDを添えて申請
+            socket.emit('join_matchmaking', { gameId: 'marathon' }); 
         } else {
             socket.emit('leave_matchmaking');
         }
@@ -346,7 +375,6 @@
             setTimeout(() => { executeAILogic(choice); }, 500);
         } else {
             document.getElementById('submit-btn').innerText = "相手の入力を待っています...";
-            // 大枠の交通整理仕様に完全に沿ってデータを送信
             socket.emit('submit_turn', { player: myPlayerNumber, choice: choice });
         }
     }
@@ -371,7 +399,6 @@
         input.value = ''; 
     }
 
-    // --- 各種UI演出・カード操作・ローカルAIエンジン（省略なし） ---
     function setupHandAndBoxes() {
         const handZone = document.getElementById('zone-hand');
         document.querySelectorAll('#my-field-row .card-slot').forEach(slot => {
@@ -543,7 +570,7 @@
             if (p1Choice.self.includes('cheer')) s.p1.cheerCount++; if (aiChoice.target.includes('cheer')) s.p1.cheerCount++;
             if (aiChoice.self.includes('cheer')) s.p2.cheerCount++; if (p1Choice.target.includes('cheer')) s.p2.cheerCount++;
 
-            let p1Spd = 5; if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp)); else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7; else if (s.p1.temp >= 10 && s.p1.temp <= 15) p1Spd = 10; else if (s.p1.temp >= 15 && s.p1.temp <= 20) p1Spd = Math.max(5, 10 - (s.p1.temp - 15)); else if (s.p1.temp >= 20) p1Spd = Math.max(0, 5 - (s.p1.temp - 20));
+            let p1Spd = 5; if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp)); else if (s.p1.temp === 5) p1Spd = 5; else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7; else if (s.p1.temp >= 10 && s.p1.temp <= 15) p1Spd = 10; else if (s.p1.temp >= 15 && s.p1.temp <= 20) p1Spd = Math.max(5, 10 - (s.p1.temp - 15)); else if (s.p1.temp >= 20) p1Spd = Math.max(0, 5 - (s.p1.temp - 20));
             if (p1Choice.self.includes('cheer')) p1Spd += 1; if (aiChoice.target.includes('cheer')) p1Spd += 1;
             let p1StoneNum = (p1Choice.self.includes('stone')?1:0) + (aiChoice.target.includes('stone')?1:0);
             s.p1.stoneCount += p1StoneNum; s.p1.consecutiveStone = p1StoneNum > 0 ? s.p1.consecutiveStone + 1 : 0;
@@ -551,7 +578,7 @@
             let p1WaterNum = (p1Choice.self.includes('water')?1:0) + (aiChoice.target.includes('water')?1:0);
             s.p1.noWaterCount = p1WaterNum === 0 ? s.p1.noWaterCount + 1 : 0;
 
-            let p2Spd = 5; if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp)); else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7; else if (s.p2.temp >= 10 && s.p2.temp <= 15) p2Spd = 10; else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15)); else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
+            let p2Spd = 5; if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp)); else if (s.p2.temp === 5) p2Spd = 5; else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7; else if (s.p2.temp >= 10 && s.p2.temp <= 15) p2Spd = 10; else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15)); else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
             if (aiChoice.self.includes('cheer')) p2Spd += 1; if (p1Choice.target.includes('cheer')) p2Spd += 1;
             let p2StoneNum = (aiChoice.self.includes('stone')?1:0) + (p1Choice.target.includes('stone')?1:0);
             s.p2.stoneCount += p2StoneNum; s.p2.consecutiveStone = p2StoneNum > 0 ? s.p2.consecutiveStone + 1 : 0;
