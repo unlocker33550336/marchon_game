@@ -1,211 +1,533 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE GAME PLATFORM - 中央統合ロビー</title>
-    <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #0f0f12; color: #e2e8f0; padding: 20px; margin: 0; user-select: none; }
-        .container { max-width: 800px; margin: 40px auto; padding: 10px; }
-        h1 { text-align: center; color: #ff4757; text-transform: uppercase; letter-spacing: 3px; font-size: 28px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(255,71,87,0.4); }
-        
-        .auth-panel, .lobby-panel { background: #15151a; border: 2px solid #26262b; border-radius: 20px; padding: 30px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        .auth-input { width: 80%; max-width: 400px; padding: 12px; margin: 10px 0; border: 1px solid #333; border-radius: 8px; background: #1c1c24; color: #fff; font-size: 15px; transition: border-color 0.3s; }
-        .auth-input:focus { border-color: #ff4757; outline: none; }
-        
-        /* プレイヤー情報カード */
-        .user-profile-card { background: linear-gradient(135deg, #1c1c24, #22222f); padding: 20px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #2d2d3d; display: flex; justify-content: space-around; align-items: center; wrap: wrap; }
-        .profile-item { text-align: center; padding: 10px 20px; }
-        .profile-label { font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-        .profile-value { font-size: 20px; font-weight: bold; color: #fff; }
-        
-        /* 統合ランクバッジ */
-        .badge { padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        .rank-NORMAL { background: #4a5568; color: #fff; }
-        .rank-ELITE { background: #48bb78; color: #fff; box-shadow: 0 0 10px rgba(72,187,120,0.4); }
-        .rank-PREMIUM { background: #4299e1; color: #fff; box-shadow: 0 0 10px rgba(66,153,225,0.4); }
-        .rank-VIP { background: #ed8936; color: #fff; box-shadow: 0 0 15px rgba(237,137,54,0.6); animation: vipPulse 2s infinite; }
-        .rank-GUEST { background: #a0aec0; color: #1a202c; }
-        @keyframes vipPulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const mongoose = require('mongoose');
+const path = require('path');
 
-        /* ゲーム筐体セレクトグリッド */
-        .game-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-top: 25px; }
-        .game-card { background: #1c1c24; border: 1px solid #2d2d3d; border-radius: 14px; padding: 20px; cursor: pointer; transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1); text-align: center; position: relative; overflow: hidden; }
-        .game-card:hover { transform: translateY(-5px); border-color: #ff4757; box-shadow: 0 8px 20px rgba(255,71,87,0.15); }
-        .game-card h3 { margin: 0 0 10px 0; font-size: 18px; color: #fff; }
-        .game-card p { margin: 0; font-size: 12px; color: #718096; line-height: 1.5; }
-        
-        .game-status-tag { display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-bottom: 10px; text-transform: uppercase; }
-        .status-active { background: rgba(72,187,120,0.15); color: #48bb78; border: 1px solid #48bb78; }
-        .status-locked { background: rgba(113,128,150,0.15); color: #a0aec0; border: 1px solid #4a5568; cursor: not-allowed; }
-        
-        .game-card.disabled { cursor: not-allowed; opacity: 0.6; }
-        .game-card.disabled:hover { transform: none; border-color: #2d2d3d; box-shadow: none; }
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-        .action-btn { background: #ff4757; color: #fff; border: none; padding: 12px 25px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-        .action-btn:hover { background: #ff6b81; }
-        .hidden { display: none !important; }
-    </style>
-    <script src="/socket.io/socket.io.js"></script>
-</head>
-<body>
-<div class="container">
-    <h1>THE GAME PLATFORM</h1>
+const PORT = 3000;
 
-    <div id="auth-panel" class="auth-panel">
-        <h2 style="margin-bottom: 20px; color: #fff;">中央プラットフォーム認証</h2>
-        <input type="text" id="auth-username" class="auth-input" placeholder="ユーザー識別名">
-        <input type="password" id="auth-password" class="auth-input" placeholder="暗号パスワード">
-        <div style="margin-top: 15px;">
-            <button class="action-btn" onclick="login()" style="width: 40%; margin-right: 5%;">ログイン</button>
-            <button class="action-btn" onclick="register()" style="width: 40%; background: #48bb78;">新規登録</button>
-        </div>
-        <hr style="border: 0; border-top: 1px solid #2d2d3d; margin: 20px 0;">
-        <button class="action-btn" onclick="loginGuest()" style="background: #4a5568; width: 85%;">お試しゲストモードで入場</button>
-    </div>
+// 管理者用の秘密の合言葉（簡易トークン）
+const ADMIN_SECRET = "THE_MARATHON_GM_SECRET_2026";
+// マッチング緊急ロックフラグ
+let isMatchingLocked = false;
 
-    <div id="lobby-panel" class="lobby-panel hidden">
-        <h2 style="color: #fff; text-align: left; margin-bottom: 20px;">プラットフォーム・メインメニュー</h2>
-        
-        <div class="user-profile-card">
-            <div class="profile-item">
-                <div class="profile-label">走者識別名</div>
-                <div class="profile-value" id="user-name" style="color: #48bb78;">----</div>
-            </div>
-            <div class="profile-item">
-                <div class="profile-label">プラットフォーム階層</div>
-                <div style="margin-top: 5px;"><span id="user-rank" class="badge rank-NORMAL">NORMAL</span></div>
-            </div>
-            <div class="profile-item">
-                <div class="profile-label">一元化共通レート</div>
-                <div class="profile-value" id="user-rate" style="color: #ff4757;">--- pt</div>
-            </div>
-            <div class="profile-item">
-                <div class="profile-label">全遊戯通算戦績</div>
-                <div class="profile-value" id="user-stats" style="font-size: 14px; color: #a0aec0;">0勝 / 0敗</div>
-            </div>
-        </div>
+// ==========================================
+// 1. 共通スキーマ定義
+// ==========================================
+const userSchema = new mongoose.Schema({
+  username: { type: String, unique: true, required: true },
+  password: { type: String, required: true },
+  rate: { type: Number, default: 100 },
+  rank: { type: String, default: "NORMAL" },
+  win: { type: Number, default: 0 },
+  lose: { type: Number, default: 0 },
+  lastPlayedWith: { type: String, default: "" },
+  lastPlayedTime: { type: Number, default: 0 }
+});
 
-        <h3 style="text-align: left; color: #fff; border-bottom: 1px solid #2d2d3d; padding-bottom: 10px;">遊戯タイトル一覧</h3>
-        
-        <div class="game-grid">
-            <div class="game-card" onclick="enterGameRoom('marathon')">
-                <div class="game-status-tag status-active">稼働中（公式レート）</div>
-                <h3>THE MARATHON</h3>
-                <p>試練をボックスへ配置し、環境を支配して1000%のゴールを競う極限回廊ダイナミクスレース。</p>
-            </div>
+const User = mongoose.model('User', userSchema);
 
-            <div class="game-card disabled">
-                <div class="game-status-tag status-locked">開発中</div>
-                <h3>nontitle</h3>
-                <p>（近日公開予定）。</p>
-            </div>
+let userSocketMap = {}; 
+let socketUserMap = {}; 
+let gameQueues = {};
+let activeGames = {};
+let reconnectTimers = {};
 
-            <div class="game-card disabled">
-                <div class="game-status-tag status-locked">開発中</div>
-                <h3>nontitle</h3>
-                <p>(近日公開予定)。</p>
-            </div>
-        </div>
+// ==========================================
+// 2. 共通レート計算システム ＆ ランク判定
+// ==========================================
+function getRank(rate) {
+  if (rate >= 2000) return "VIP";
+  else if (rate >= 1500) return "PREMIUM";
+  else if (rate >= 500) return "ELITE";
+  else return "NORMAL";
+}
 
-        <div style="margin-top: 40px; text-align: right;">
-            <button class="action-btn" onclick="logout()" style="background: #e53e3e; font-size: 13px; padding: 8px 20px;">ログアウト</button>
-        </div>
-    </div>
-</div>
+function getLosePenalty(rank) {
+  if (rank === "VIP") return 250;
+  if (rank === "PREMIUM") return 180;
+  if (rank === "ELITE") return 100;
+  return 30;
+}
 
-<script>
-    let socket = null;
+async function processPlatformRate(username, isWin, resultType) {
+  console.log(`[RATE UPDATE] レート計算開始: ${username} | 勝利フラグ: ${isWin} | 終了タイプ: ${resultType}`);
+  try {
+    const user = await User.findOne({ username });
+    if (!user || username === 'admin') return { rateChange: 0, currentRate: 100, currentRank: "NORMAL" };
 
-    window.onload = function() {
-        const savedUser = localStorage.getItem('marathon_user');
-        const savedToken = localStorage.getItem('marathon_token');
-        if (savedUser && savedToken) {
-            setupSocket();
-            socket.emit('login', { username: savedUser, token: savedToken });
-        }
+    let oldRate = user.rate;
+
+    if (isWin) {
+      let change = 0;
+      if (resultType === 'goal') change = 300;
+      else if (resultType === 'immobilize') change = 150;
+      else change = 50;
+      
+      user.win += 1;
+      user.rate = user.rate + change;
+    } else {
+      let penalty = getLosePenalty(user.rank);
+      user.lose += 1;
+      user.rate = Math.max(0, user.rate - penalty);
+    }
+
+    user.rank = getRank(user.rate);
+    await user.save();
+    console.log(`-> レート計算完了: ${username} [新レート: ${user.rate} pt / 新ランク: ${user.rank}]`);
+
+    return {
+      rateChange: Math.abs(user.rate - oldRate),
+      currentRate: user.rate,
+      currentRank: user.rank
     };
+  } catch (err) {
+    console.error(`❌ [RATE UPDATE CRASH] ${username} のレート更新中に深刻なエラー:`, err);
+    return { rateChange: 0, currentRate: 100, currentRank: "NORMAL" };
+  }
+}
 
-    function setupSocket() {
-        if (socket) return;
-        socket = io();
+app.use(express.static(__dirname));
 
-        socket.on('register_res', (res) => { alert(res.msg); });
+// 管理者画面用のルーティングを明示的に許可
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
 
-        socket.on('login_res', (res) => {
-            if (res.success) {
-                
-                // admin特権ログイン時の強制ルーティング分岐
-                if (res.isAdmin) {
-                    localStorage.setItem('admin_token', res.token);
-                    alert("【SYSTEM WARNING】管理者権限（GM）を検出。コントロールパネルへ遷移します。");
-                    location.href = '/admin';
-                    return;
-                }
-                
-                localStorage.setItem('marathon_user', res.username);
-                const pwd = document.getElementById('auth-password').value.trim();
-                if (pwd) localStorage.setItem('marathon_token', pwd);
+// ==========================================
+// 3. Socket.io 通信ハブゲート
+// ==========================================
+io.on('connection', (socket) => {
+    console.log(`[SOCKET CONNECTED] 新しい回線が確立されました (SocketID: ${socket.id})`);
 
-                // 🌟【バグ修正完了】classList.add に修正して画面ロックを完全解除！
-                document.getElementById('auth-panel').classList.add('hidden');
-                document.getElementById('lobby-panel').classList.remove('hidden');
-
-                document.getElementById('user-name').innerText = res.username;
-                document.getElementById('user-rate').innerText = res.rate + " pt";
-                
-                const rankBadge = document.getElementById('user-rank');
-                rankBadge.innerText = res.rank;
-                rankBadge.className = `badge rank-${res.rank}`;
-
-                if (res.win !== undefined && res.lose !== undefined) {
-                    document.getElementById('user-stats').innerText = `${res.win} 勝 / ${res.lose} 敗`;
-                }
-            } else {
-                alert(res.msg || "ログインに失敗しました");
-                clearAuthBackup();
+    // 【管理者：認証チェック ＆ 情報送出】
+    socket.on('admin_auth', async (data) => {
+        if (data && data.token === ADMIN_SECRET) {
+            socket.join('admin_room');
+            console.log(`⚡ [GM CONNECTED] 管理者がコントロールパネルに同期しました。`);
+            
+            try {
+                const allUsers = await User.find({}, { password: 0 });
+                socket.emit('admin_init_res', {
+                    success: true,
+                    users: allUsers,
+                    isMatchingLocked: isMatchingLocked,
+                    activeGamesCount: Object.keys(activeGames).length
+                });
+            } catch (e) {
+                socket.emit('admin_init_res', { success: false, msg: "ユーザーリストの取得に失敗" });
             }
+        } else {
+            socket.emit('admin_init_res', { success: false, msg: "不正なトークンです。閲覧権限がありません。" });
+        }
+    });
+
+    // 【管理者特権：神のレート改変】
+    socket.on('admin_change_rate', async (data) => {
+        if (!socket.rooms.has('admin_room')) return;
+        const { targetUser, newRate } = data;
+        try {
+            const user = await User.findOne({ username: targetUser });
+            if (user) {
+                user.rate = parseInt(newRate) || 0;
+                user.rank = getRank(user.rate);
+                await user.save();
+                console.log(`⚡ [GM ACTION] ${targetUser} のレートを ${newRate}pt に書き換えました。`);
+                
+                const allUsers = await User.find({}, { password: 0 });
+                io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
+            }
+        } catch (e) {
+            console.error("レート神改変エラー:", e);
+        }
+    });
+
+    // 【管理者特権：走者BAN（データ物理削除）】
+    socket.on('admin_ban_user', async (data) => {
+        if (!socket.rooms.has('admin_room')) return;
+        const { targetUser } = data;
+        try {
+            await User.deleteOne({ username: targetUser });
+            console.log(`🚨 [GM ACTION] ユーザー [${targetUser}] をプラットフォームから永久追放しました。`);
+            
+            const allUsers = await User.find({}, { password: 0 });
+            io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
+        } catch (e) {
+            console.error("BAN執行エラー:", e);
+        }
+    });
+
+    // 【管理者特権：マッチング緊急ロック切り替え】
+    socket.on('admin_toggle_lock', () => {
+        if (!socket.rooms.has('admin_room')) return;
+        isMatchingLocked = !isMatchingLocked;
+        console.log(`⚡ [GM ACTION] マッチングロック状態を切り替えました: ${isMatchingLocked}`);
+        io.to('admin_room').emit('admin_lock_status', { isMatchingLocked: isMatchingLocked });
+    });
+
+    // 【新規登録】
+    socket.on('register', async (data) => {
+        console.log('[SIGNAL RECEIVED] register イベントを受信しました:', data);
+        const { username, password } = data;
+        
+        if (!username || !password) {
+            return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
+        }
+        if (username.toLowerCase() === 'admin') {
+            return socket.emit('register_res', { success: false, msg: "その識別名はシステム予約済みです" });
+        }
+        
+        try {
+            console.log(`-> [DB QUERY] 既存のユーザー [${username}] を検索中...`);
+            const exists = await User.findOne({ username });
+            if (exists) {
+                return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
+            }
+            
+            console.log(`-> [DB INSERT] 新しいユーザー [${username}] を書き込み中...`);
+            await User.create({ username, password, rate: 100, rank: "NORMAL", win: 0, lose: 0 });
+            console.log(`✅ [REGISTER SUCCESS] ユーザー [${username}] の作成が完了しました`);
+            socket.emit('register_res', { success: true, msg: "中央システムへの走者登録が完了しました！" });
+        } catch (err) {
+            console.error('❌ [REGISTER CRASH] 新規登録処理中にエラーが発生しました:', err);
+            socket.emit('register_res', { success: false, msg: "サーバーエラー（DB書き込み失敗）" });
+        }
+    });
+
+    // 【ログイン】
+    socket.on('login', async (data) => {
+        console.log('[SIGNAL RECEIVED] login イベントを受信しました:', data ? data.username : "データなし");
+        const { username, password, token } = data;
+        
+        if (username === 'admin') {
+            if (password === 'adminpassword' || token === ADMIN_SECRET) {
+                console.log(`⚡ [ADMIN LOGIN SUCCESS] 管理者権限を識別。裏口トークンを発行します。`);
+                return socket.emit('login_res', { 
+                    success: true, 
+                    username: 'admin', 
+                    isAdmin: true, 
+                    token: ADMIN_SECRET 
+                });
+            } else {
+                return socket.emit('login_res', { success: false, msg: "管理者パスワードが不正です" });
+            }
+        }
+
+        try {
+            console.log(`-> [DB QUERY] ユーザー [${username}] の認証情報を検索中...`);
+            const user = await User.findOne({ username });
+            if (user) {
+                if ((token && user.password === token) || (password && user.password === password)) {
+                    userSocketMap[username] = socket.id;
+                    socketUserMap[socket.id] = username;
+                    
+                    console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
+                    
+                    // 🌟【最重要マージ】画面遷移して新しく繋ぎ直された回線を、元の試合部屋に自動復帰させる
+                    for (let rId in activeGames) {
+                        if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
+                            socket.join(rId);
+                            console.log(`🔄 [ROOM REJOIN] 試合中の走者 [${username}] が新しい回線で部屋 [${rId}] に自動同期しました。`);
+                            break;
+                        }
+                    }
+
+                    return socket.emit('login_res', { 
+                        success: true, 
+                        username, 
+                        rate: user.rate, 
+                        rank: user.rank,
+                        win: user.win,
+                        lose: user.lose
+                    });
+                }
+            }
+            console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました`);
+            socket.emit('login_res', { success: false, msg: "走者識別名またはパスワードが不正です" });
+        } catch (err) {
+            console.error('❌ [LOGIN CRASH] ログイン処理中にエラーが発生しました:', err);
+            socket.emit('login_res', { success: false, msg: "サーバー接続エラー" });
+        }
+    });
+
+    // 【ゲストログイン】
+    socket.on('login_guest', () => {
+        let guestName = "Guest_" + Math.floor(1000 + Math.random() * 9000);
+        userSocketMap[guestName] = socket.id;
+        socketUserMap[socket.id] = guestName;
+        console.log(`👤 [GUEST ENTER] ゲスト [${guestName}] が入場しました`);
+        
+        // 🌟 ゲストも念のためアクティブ試合の部屋チェック（基本は不要だが安全策）
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === guestName || activeGames[rId].p2 === guestName) {
+                socket.join(rId);
+                break;
+            }
+        }
+
+        socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
+    });
+
+    // 【マッチングエントリー】
+    socket.on('join_matchmaking', async (data) => {
+        if (isMatchingLocked) {
+            return socket.emit('matchmaking_error', { msg: "現在サーバーメンテナンスのため、公式マッチングの受付は一時的にロックされています。" });
+        }
+
+        const username = socketUserMap[socket.id];
+        if (!username) return socket.emit('matchmaking_error', { msg: "セッションが切断されています。再ログインしてください" });
+
+        const { gameId } = data;
+        console.log(`[QUEUE ATTEMPT] ${username} がゲーム [${gameId}] の待機列にエントリーを要求`);
+
+        if (!gameId) return socket.emit('matchmaking_error', { msg: "対象のゲーム種別IDが不明です" });
+        if (!gameQueues[gameId]) { gameQueues[gameId] = []; }
+
+        let isAlreadyQueued = false;
+        for (let gId in gameQueues) {
+            if (gameQueues[gId].some(w => w.username === username)) { isAlreadyQueued = true; break; }
+        }
+        if (isAlreadyQueued) return socket.emit('matchmaking_error', { msg: "既にいずれかのゲームでマッチング探索中です" });
+
+        let userRate = 100;
+        let userRank = "NORMAL";
+
+        try {
+            const user = await User.findOne({ username });
+            if (user) { userRate = user.rate; userRank = user.rank; }
+        } catch (e) {
+            console.error("[QUEUE DB WARNING] マッチング時のレート取得に失敗:", e);
+        }
+
+        gameQueues[gameId].push({
+            id: socket.id,
+            username: username,
+            rate: userRate,
+            rank: userRank,
+            socket: socket
+        });
+
+        console.log(`-> [QUEUE SUCCESS] ${username} が [${gameId}] のカゴに入りました (現在の待機人数: ${gameQueues[gameId].length}人)`);
+        socket.emit('matchmaking_started', { gameId });
+    });
+
+    // 【マッチングキャンセル】
+    socket.on('leave_matchmaking', () => {
+        const username = socketUserMap[socket.id] || "未知のユーザー";
+        console.log(`[QUEUE CANCEL] ${username} が待機列から離脱しました`);
+        for (let gameId in gameQueues) {
+            gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
+        }
+        socket.emit('matchmaking_stopped');
+    });
+
+    // 【ゲームデータパケット中継】
+    socket.on('game_packet', (data) => {
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        // 🌟 新しい回線が正しい部屋に join していれば、この中継が100%相手に届く！
+        if (roomId) { socket.to(roomId).emit('game_packet_receive', data); }
+    });
+
+    // 【チャット】
+    socket.on('send_chat', (msg) => {
+        let roomId = null;
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
+    });
+
+    // 【ゲーム終了申告】
+    socket.on('submit_game_end', async (data) => {
+        const username = socketUserMap[socket.id];
+        console.log(`[GAME END SIGNAL] ${username} から勝敗確定要求を受信:`, data);
+
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (!roomId) return console.log('-> [ERROR] 該当するアクティブな部屋が見つかりません');
+        const game = activeGames[roomId];
+
+        if (game.isProcessingResult) return console.log('-> [WARNING] 既にリザルト計算が実行中です');
+        game.isProcessingResult = true;
+
+        const { winnerUsername, resultType } = data;
+        let p1Name = game.p1;
+        let p2Name = game.p2;
+        let p1Result = null;
+        let p2Result = null;
+
+        if (winnerUsername === 'DRAW') {
+            p1Result = await processPlatformRate(p1Name, false, 'draw');
+            p2Result = await processPlatformRate(p2Name, false, 'draw');
+        } else if (winnerUsername === p1Name) {
+            p1Result = await processPlatformRate(p1Name, true, resultType);
+            p2Result = await processPlatformRate(p2Name, false, resultType);
+        } else if (winnerUsername === p2Name) {
+            p1Result = await processPlatformRate(p1Name, false, resultType);
+            p2Result = await processPlatformRate(p2Name, true, resultType);
+        }
+
+        let p1SocketId = userSocketMap[p1Name];
+        let p2SocketId = userSocketMap[p2Name];
+
+        if (p1SocketId) {
+            io.to(p1SocketId).emit('platform_game_over', {
+                winner: winnerUsername,
+                rateChange: (winnerUsername === p1Name) ? p1Result.rateChange : p2Result.rateChange,
+                newRate: p1Result.currentRate,
+                newRank: p1Result.currentRank
+            });
+        }
+        if (p2SocketId) {
+            io.to(p2SocketId).emit('platform_game_over', {
+                winner: winnerUsername,
+                rateChange: (winnerUsername === p2Name) ? p2Result.rateChange : p1Result.rateChange,
+                newRate: p2Result.currentRate,
+                newRank: p2Result.currentRank
+            });
+        }
+
+        console.log(`[ROOM DELETED] 部屋 ${roomId} のゲーム結果処理が完了したため削除します`);
+        delete activeGames[roomId];
+    });
+
+    // 【切断】
+    socket.on('disconnect', () => {
+        const username = socketUserMap[socket.id];
+        console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
+        
+        for (let gameId in gameQueues) {
+            gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
+        }
+        delete socketUserMap[socket.id];
+
+        if (username && username !== 'admin' && !username.startsWith('Guest_')) {
+            
+            let isInGame = false;
+            let userRoomId = null;
+            for (let rId in activeGames) {
+                if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
+                    isInGame = true;
+                    userRoomId = rId;
+                    break;
+                }
+            }
+
+            if (isInGame) {
+                console.log(`⚠️ [RECONNECT TIMER] 試合中走者 [${username}] の回線切断を検知。5分間の復帰待機タイマーを始動します。`);
+                
+                reconnectTimers[username] = setTimeout(async () => {
+                    console.log(`🚨 [TIMEOUT PENALTY] ${username} が5分以内に復帰しなかったため失格処理を執行します`);
+                    try {
+                        const user = await User.findOne({ username });
+                        if (user) {
+                            user.rate = Math.max(0, user.rate - 200);
+                            user.lose += 1;
+                            user.rank = getRank(user.rate);
+                            await user.save();
+                            console.log(`-> ペナルティDB更新完了: ${username} 新レート ${user.rate} pt / 1敗追加`);
+                        }
+                    } catch (e) {
+                        console.error("ペナルティDB更新中にエラー:", e);
+                    }
+
+                    if (userRoomId && activeGames[userRoomId]) {
+                        const game = activeGames[userRoomId];
+                        let opponent = (game.p1 === username) ? game.p2 : game.p1;
+                        let oppSocketId = userSocketMap[opponent];
+
+                        let oppResult = await processPlatformRate(opponent, true, 'disconnect_win');
+                        if (oppSocketId) {
+                            io.to(oppSocketId).emit('platform_game_over', {
+                                winner: opponent,
+                                rateChange: oppResult.rateChange,
+                                newRate: oppResult.currentRate,
+                                newRank: oppResult.currentRank
+                            });
+                        }
+                        delete activeGames[userRoomId];
+                    }
+                    delete reconnectTimers[username];
+                }, 5 * 60 * 1000);
+
+            } else {
+                console.log(`-> [LOGOUT CLEARED] ${username} は非戦闘状態のため、安全に切断処理を行いました。`);
+            }
+        }
+    });
+});
+
+// ==========================================
+// 4. マッチングシステムループ
+// ==========================================
+setInterval(async () => {
+    for (let gameId in gameQueues) {
+        let queue = gameQueues[gameId];
+        if (queue.length < 2) continue;
+
+        let p1 = queue.shift();
+        let p2 = queue.shift();
+
+        let roomId = `room_${gameId}_${p1.username}_${p2.username}_${Date.now()}`;
+        console.log(`⚔️ [MATCH FOUND] 試合成立しました！部屋ID: ${roomId} (${p1.username} vs ${p2.username})`);
+        
+        p1.socket.join(roomId);
+        p2.socket.join(roomId);
+
+        activeGames[roomId] = { gameId: gameId, p1: p1.username, p2: p2.username, isProcessingResult: false, state: {} };
+
+        p1.socket.emit('platform_match_found', {
+            roomId: roomId, gameId: gameId, myRole: 1,
+            p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
+            p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
+        });
+
+        p2.socket.emit('platform_match_found', {
+            roomId: roomId, gameId: gameId, myRole: 2,
+            p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
+            p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
         });
     }
+}, 1000);
 
-    function login() {
-        setupSocket();
-        const u = document.getElementById('auth-username').value.trim();
-        const p = document.getElementById('auth-password').value.trim();
-        if (!u || !p) return alert("ユーザー名とパスワードを入力してください");
-        socket.emit('login', { username: u, password: p });
-    }
+// ==========================================
+// 5. 同期型・データベース接続＆サーバー起動システム
+// ==========================================
+async function startSecurePlatform() {
+  try {
+    console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
+    
+    await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
+      bufferCommands: false
+    });
+    
+    console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
 
-    // ユーザー名
-    function register() {
-        setupSocket();
-        const u = document.getElementById('auth-username').value.trim();
-        const p = document.getElementById('auth-password').value.trim();
-        if (!u || !p) return alert("ユーザー名とパスワードを入力してください");
-        socket.emit('register', { username: u, password: p });
-    }
+    server.listen(PORT, () => {
+        console.log(`=======================================================`);
+        console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
+        console.log(`=======================================================`);
+    });
 
-    function loginGuest() {
-        setupSocket();
-        socket.emit('login_guest');
-    }
+  } catch (err) {
+    console.error('❌ [DB CRITICAL ERROR] データベース接続に失敗したため、サーバーの起動を非常停止しました:');
+    console.error(err);
+  }
+}
 
-    function enterGameRoom(gameId) {
-        if (gameId === 'marathon') {
-            location.href = '/marathon.html';
-        }
-    }
-
-    function logout() {
-        clearAuthBackup();
-        location.reload();
-    }
-
-    function clearAuthBackup() {
-        localStorage.removeItem('marathon_user');
-        localStorage.removeItem('marathon_token');
-        localStorage.removeItem('marathon_mode');
-    }
-</script>
-</body>
-</html>
+startSecurePlatform();
