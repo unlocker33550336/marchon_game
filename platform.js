@@ -91,12 +91,26 @@ async function processPlatformRate(username, isWin, resultType) {
   }
 }
 
-app.use(express.static(__dirname));
+// ==========================================
+// 🌟【セキュリティ修正】危険なフォルダ丸ごと公開(express.static)を完全撤廃！
+// 許可されたページだけをピンポイントで通す個別ルーティングシステム
+// ==========================================
 
-// 管理者画面用のルーティングを明示的に許可
+// 1. メインロビー・ログイン画面 (index.html)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 2. 管理者コントロールパネル (admin.html)
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
+
+// 3. マラソンゲーム画面 (marathon.html)
+app.get('/marathon.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'marathon.html'));
+});
+
 
 // ==========================================
 // 3. Socket.io 通信ハブゲート
@@ -226,6 +240,16 @@ io.on('connection', (socket) => {
                     socketUserMap[socket.id] = username;
                     
                     console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
+                    
+                    // 🔄【自動再入場システム】画面遷移などで新しく繋ぎ直された回線を、元の試合部屋(Room)に自動同期させる
+                    for (let rId in activeGames) {
+                        if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
+                            socket.join(rId);
+                            console.log(`🔄 [ROOM REJOIN] 試合中の走者 [${username}] が新しい回線で部屋 [${rId}] に自動復帰しました。`);
+                            break;
+                        }
+                    }
+
                     return socket.emit('login_res', { 
                         success: true, 
                         username, 
@@ -250,6 +274,15 @@ io.on('connection', (socket) => {
         userSocketMap[guestName] = socket.id;
         socketUserMap[socket.id] = guestName;
         console.log(`👤 [GUEST ENTER] ゲスト [${guestName}] が入場しました`);
+        
+        // ゲストも進行中の部屋があれば再加入
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === guestName || activeGames[rId].p2 === guestName) {
+                socket.join(rId);
+                break;
+            }
+        }
+
         socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
     });
 
@@ -315,6 +348,7 @@ io.on('connection', (socket) => {
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
+        // 部屋に新しい回線が自動入場しているため、この中継が確実に相手へ届く
         if (roomId) { socket.to(roomId).emit('game_packet_receive', data); }
     });
 
@@ -391,16 +425,14 @@ io.on('connection', (socket) => {
         const username = socketUserMap[socket.id];
         console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
         
-        // 1. マッチング待機列に並んでいた場合は、安全にキューから削除
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         delete socketUserMap[socket.id];
 
-        // 2. 本物のプレイヤーアカウントのみを精査
         if (username && username !== 'admin' && !username.startsWith('Guest_')) {
             
-            // 🌟現在アクティブな「試合（部屋）」に参加中かどうかを厳密チェック
+            // 現在アクティブな「試合部屋」に参加中かどうかを厳密チェック
             let isInGame = false;
             let userRoomId = null;
             for (let rId in activeGames) {
@@ -411,7 +443,7 @@ io.on('connection', (socket) => {
                 }
             }
 
-            // 🛑 試合中の場合のみペナルティタイマーをブートする
+            // 🛑 試合中の場合のみペナルティタイマーをブートする（冤罪の完全撤廃）
             if (isInGame) {
                 console.log(`⚠️ [RECONNECT TIMER] 試合中走者 [${username}] の回線切断を検知。5分間の復帰待機タイマーを始動します。`);
                 
@@ -430,7 +462,6 @@ io.on('connection', (socket) => {
                         console.error("ペナルティDB更新中にエラー:", e);
                     }
 
-                    // 対戦相手への自動勝利中継処理
                     if (userRoomId && activeGames[userRoomId]) {
                         const game = activeGames[userRoomId];
                         let opponent = (game.p1 === username) ? game.p2 : game.p1;
@@ -451,7 +482,6 @@ io.on('connection', (socket) => {
                 }, 5 * 60 * 1000);
 
             } else {
-                // 🌟 試合中でない（ロビーにいただけ）なら無傷で解放！
                 console.log(`-> [LOGOUT CLEARED] ${username} は非戦闘状態のため、安全に切断処理を行いました。`);
             }
         }
@@ -498,7 +528,7 @@ async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
     
-    // 🌟 【修正完了】@cluster0 を正しい位置に完全復活させ、接続エラーを完全ブロック！
+    // 正しい @cluster0 の記述位置で、接続フリーズを完全回避
     await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
