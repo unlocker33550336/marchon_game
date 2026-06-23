@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const path = require('path');
 
-const app = express();
+const app = report = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -92,25 +92,19 @@ async function processPlatformRate(username, isWin, resultType) {
 }
 
 // ==========================================
-// 🌟【セキュリティ修正】危険なフォルダ丸ごと公開(express.static)を完全撤廃！
-// 許可されたページだけをピンポイントで通す個別ルーティングシステム
+// 個別ルーティングシステム（ソースコードの露出を完全防御）
 // ==========================================
-
-// 1. メインロビー・ログイン画面 (index.html)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. 管理者コントロールパネル (admin.html)
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-// 3. マラソンゲーム画面 (marathon.html)
 app.get('/marathon.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'marathon.html'));
 });
-
 
 // ==========================================
 // 3. Socket.io 通信ハブゲート
@@ -185,85 +179,59 @@ io.on('connection', (socket) => {
 
     // 【新規登録】
     socket.on('register', async (data) => {
-        console.log('[SIGNAL RECEIVED] register イベントを受信しました:', data);
         const { username, password } = data;
-        
         if (!username || !password) {
             return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
         }
         if (username.toLowerCase() === 'admin') {
             return socket.emit('register_res', { success: false, msg: "その識別名はシステム予約済みです" });
         }
-        
         try {
-            console.log(`-> [DB QUERY] 既存のユーザー [${username}] を検索中...`);
             const exists = await User.findOne({ username });
             if (exists) {
                 return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
             }
-            
-            console.log(`-> [DB INSERT] 新しいユーザー [${username}] を書き込み中...`);
             await User.create({ username, password, rate: 100, rank: "NORMAL", win: 0, lose: 0 });
-            console.log(`✅ [REGISTER SUCCESS] ユーザー [${username}] の作成が完了しました`);
             socket.emit('register_res', { success: true, msg: "中央システムへの走者登録が完了しました！" });
         } catch (err) {
-            console.error('❌ [REGISTER CRASH] 新規登録処理中にエラーが発生しました:', err);
             socket.emit('register_res', { success: false, msg: "サーバーエラー（DB書き込み失敗）" });
         }
     });
 
     // 【ログイン】
     socket.on('login', async (data) => {
-        console.log('[SIGNAL RECEIVED] login イベントを受信しました:', data ? data.username : "データなし");
         const { username, password, token } = data;
-        
         if (username === 'admin') {
             if (password === 'adminpassword' || token === ADMIN_SECRET) {
-                console.log(`⚡ [ADMIN LOGIN SUCCESS] 管理者権限を識別。裏口トークンを発行します。`);
-                return socket.emit('login_res', { 
-                    success: true, 
-                    username: 'admin', 
-                    isAdmin: true, 
-                    token: ADMIN_SECRET 
-                });
+                return socket.emit('login_res', { success: true, username: 'admin', isAdmin: true, token: ADMIN_SECRET });
             } else {
                 return socket.emit('login_res', { success: false, msg: "管理者パスワードが不正です" });
             }
         }
-
         try {
-            console.log(`-> [DB QUERY] ユーザー [${username}] の認証情報を検索中...`);
             const user = await User.findOne({ username });
             if (user) {
                 if ((token && user.password === token) || (password && user.password === password)) {
                     userSocketMap[username] = socket.id;
                     socketUserMap[socket.id] = username;
                     
-                    console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
-                    
-                    // 🔄【自動再入場システム】画面遷移などで新しく繋ぎ直された回線を、元の試合部屋(Room)に自動同期させる
                     for (let rId in activeGames) {
                         if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
                             socket.join(rId);
+                            let myRole = (activeGames[rId].p1 === username) ? 1 : 2;
+                            socket.emit('assigned_player', myRole);
                             console.log(`🔄 [ROOM REJOIN] 試合中の走者 [${username}] が新しい回線で部屋 [${rId}] に自動復帰しました。`);
                             break;
                         }
                     }
 
                     return socket.emit('login_res', { 
-                        success: true, 
-                        username, 
-                        rate: user.rate, 
-                        rank: user.rank,
-                        win: user.win,
-                        lose: user.lose
+                        success: true, username, rate: user.rate, rank: user.rank, win: user.win, lose: user.lose
                     });
                 }
             }
-            console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました`);
             socket.emit('login_res', { success: false, msg: "走者識別名またはパスワードが不正です" });
         } catch (err) {
-            console.error('❌ [LOGIN CRASH] ログイン処理中にエラーが発生しました:', err);
             socket.emit('login_res', { success: false, msg: "サーバー接続エラー" });
         }
     });
@@ -273,31 +241,26 @@ io.on('connection', (socket) => {
         let guestName = "Guest_" + Math.floor(1000 + Math.random() * 9000);
         userSocketMap[guestName] = socket.id;
         socketUserMap[socket.id] = guestName;
-        console.log(`👤 [GUEST ENTER] ゲスト [${guestName}] が入場しました`);
-        
-        // ゲストも進行中の部屋があれば再加入
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === guestName || activeGames[rId].p2 === guestName) {
                 socket.join(rId);
+                let myRole = (activeGames[rId].p1 === guestName) ? 1 : 2;
+                socket.emit('assigned_player', myRole);
                 break;
             }
         }
-
         socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
     });
 
     // 【マッチングエントリー】
     socket.on('join_matchmaking', async (data) => {
         if (isMatchingLocked) {
-            return socket.emit('matchmaking_error', { msg: "現在サーバーメンテナンスのため、公式マッチングの受付は一時的にロックされています。" });
+            return socket.emit('matchmaking_error', { msg: "現在サーバーメンテナンスのため公式マッチングはロックされています。" });
         }
-
         const username = socketUserMap[socket.id];
         if (!username) return socket.emit('matchmaking_error', { msg: "セッションが切断されています。再ログインしてください" });
 
         const { gameId } = data;
-        console.log(`[QUEUE ATTEMPT] ${username} がゲーム [${gameId}] の待機列にエントリーを要求`);
-
         if (!gameId) return socket.emit('matchmaking_error', { msg: "対象のゲーム種別IDが不明です" });
         if (!gameQueues[gameId]) { gameQueues[gameId] = []; }
 
@@ -309,81 +272,232 @@ io.on('connection', (socket) => {
 
         let userRate = 100;
         let userRank = "NORMAL";
-
         try {
             const user = await User.findOne({ username });
             if (user) { userRate = user.rate; userRank = user.rank; }
         } catch (e) {
-            console.error("[QUEUE DB WARNING] マッチング時のレート取得に失敗:", e);
+            console.error("レート取得失敗:", e);
         }
 
-        gameQueues[gameId].push({
-            id: socket.id,
-            username: username,
-            rate: userRate,
-            rank: userRank,
-            socket: socket
-        });
-
-        console.log(`-> [QUEUE SUCCESS] ${username} が [${gameId}] のカゴに入りました (現在の待機人数: ${gameQueues[gameId].length}人)`);
+        gameQueues[gameId].push({ id: socket.id, username: username, rate: userRate, rank: userRank, socket: socket });
         socket.emit('matchmaking_started', { gameId });
     });
 
     // 【マッチングキャンセル】
     socket.on('leave_matchmaking', () => {
-        const username = socketUserMap[socket.id] || "未知のユーザー";
-        console.log(`[QUEUE CANCEL] ${username} が待機列から離脱しました`);
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         socket.emit('matchmaking_stopped');
     });
 
-    // 【ゲームデータパケット中継】
-    socket.on('game_packet', (data) => {
+    // イベント発動の予約回収
+    socket.on('reserve_event', (data) => {
         const username = socketUserMap[socket.id];
         if (!username) return;
-
         let roomId = null;
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        // 部屋に新しい回線が自動入場しているため、この中継が確実に相手へ届く
-        if (roomId) { socket.to(roomId).emit('game_packet_receive', data); }
+        if (!roomId) return;
+        const game = activeGames[roomId];
+        if (data.player === 1) game.state.p1Reserved = true;
+        if (data.player === 2) game.state.p2Reserved = true;
     });
 
-    // 【チャット】
-    socket.on('send_chat', (msg) => {
-        let roomId = null;
+    // カード移動のパケット中継
+    socket.on('player_move_card', (data) => {
         const username = socketUserMap[socket.id];
         if (!username) return;
-
+        let roomId = null;
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
+        if (roomId) { socket.to(roomId).emit('opponent_moving_card', data); }
     });
 
-    // 【ゲーム終了申告】
+    // ターン確定データの回収 ＆ 同期集計
+    socket.on('submit_turn', async (data) => {
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (!roomId) return;
+        
+        const game = activeGames[roomId];
+        const s = game.state;
+
+        if (data.player === 1) s.p1Choice = data.choice;
+        if (data.player === 2) s.p2Choice = data.choice;
+
+        // 両プレイヤーの配置データが揃ったら、サーバーサイドで計算処理を実行
+        if (s.p1Choice && s.p2Choice) {
+            
+            // 1. 廃棄物のスタック加算
+            s.p1Choice.waste.forEach(t => s.p1.wastePile[t]++);
+            s.p2Choice.waste.forEach(t => s.p2.wastePile[t]++);
+
+            let activeEvent = null;
+            let eventSender = 0;
+            let evText = "";
+
+            // 2. GMイベント処理（P1）
+            if (s.p1Reserved) {
+                let maxType = 'cheer'; let maxCount = -1;
+                for (let t in s.p1.wastePile) {
+                    if (s.p1.wastePile[t] > maxCount) { maxCount = s.p1.wastePile[t]; maxType = t; }
+                }
+                if (maxType === 'water') { s.p1.temp -= maxCount; activeEvent = { title: `天の涙 (-${maxCount}℃)`, color: "#3c6382" }; }
+                else if (maxType === 'stone') { s.p1.debt += maxCount; activeEvent = { title: `避けれぬ現実 (+${maxCount}%壁)`, color: "#57606f" }; }
+                else if (maxType === 'sun') { s.p1.temp += maxCount; activeEvent = { title: `地獄の炎のおでむかえ (+${maxCount}℃)`, color: "#b33939" }; }
+                else if (maxType === 'cheer') { s.p1.progress += (maxCount * 4); activeEvent = { title: `大応援 (+${maxCount*4}%前進)`, color: "#218c74" }; }
+                
+                evText += `★${game.p1}のイベント発動\n`;
+                s.p1.wastePile[maxType] = 0; s.lastEventP1 = s.turn; s.p1Reserved = false; eventSender = 1;
+            }
+
+            // 3. GMイベント処理（P2）
+            if (s.p2Reserved) {
+                let maxType = 'cheer'; let maxCount = -1;
+                for (let t in s.p2.wastePile) {
+                    if (s.p2.wastePile[t] > maxCount) { maxCount = s.p2.wastePile[t]; maxType = t; }
+                }
+                if (maxType === 'water') { s.p2.temp -= maxCount; activeEvent = { title: `天の涙 (-${maxCount}℃)`, color: "#3c6382" }; }
+                else if (maxType === 'stone') { s.p2.debt += maxCount; activeEvent = { title: `避けれぬ現実 (+${maxCount}%壁)`, color: "#57606f" }; }
+                else if (maxType === 'sun') { s.p2.temp += maxCount; activeEvent = { title: `地獄の炎のおでむかえ (+${maxCount}℃)`, color: "#b33939" }; }
+                else if (maxType === 'cheer') { s.p2.progress += (maxCount * 4); activeEvent = { title: `大応援 (+${maxCount*4}%前進)`, color: "#218c74" }; }
+                
+                evText += `★${game.p2}のイベント発動\n`;
+                s.p2.wastePile[maxType] = 0; s.lastEventP2 = s.turn; s.p2Reserved = false; eventSender = 2;
+            }
+
+            // 4. 通常カード・配置シナジー計算
+            let p1Sun = s.p1Choice.self.includes('sun') || s.p2Choice.target.includes('sun');
+            let p2Sun = s.p2Choice.self.includes('sun') || s.p1Choice.target.includes('sun');
+            if (p1Sun) s.p1.temp++; if (p2Sun) s.p2.temp++;
+
+            // P1の基本速度計算
+            let p1Spd = 5;
+            if (s.p1.temp < 5) p1Spd = Math.max(0, 5 - (5 - s.p1.temp));
+            else if (s.p1.temp === 5) p1Spd = 5;
+            else if (s.p1.temp >= 6 && s.p1.temp <= 10) p1Spd = 7;
+            else if (s.p1.temp >= 10 && s.p1.temp <= 15) p1Spd = 10;
+            else if (s.p1.temp >= 15 && s.p1.temp <= 20) p1Spd = Math.max(5, 10 - (s.p1.temp - 15));
+            else if (s.p1.temp >= 20) p1Spd = Math.max(0, 5 - (s.p1.temp - 20));
+
+            if (s.p1Choice.self.includes('cheer')) p1Spd += 1; if (s.p2Choice.target.includes('cheer')) p1Spd += 1;
+            let p1StoneNum = (s.p1Choice.self.includes('stone')?1:0) + (s.p2Choice.target.includes('stone')?1:0);
+            if (p1StoneNum > 0) p1Spd -= 1;
+
+            // P2の基本速度計算
+            let p2Spd = 5;
+            if (s.p2.temp < 5) p2Spd = Math.max(0, 5 - (5 - s.p2.temp));
+            else if (s.p2.temp === 5) p2Spd = 5;
+            else if (s.p2.temp >= 6 && s.p2.temp <= 10) p2Spd = 7;
+            else if (s.p2.temp >= 10 && s.p2.temp <= 15) p2Spd = 10;
+            else if (s.p2.temp >= 15 && s.p2.temp <= 20) p2Spd = Math.max(5, 10 - (s.p2.temp - 15));
+            else if (s.p2.temp >= 20) p2Spd = Math.max(0, 5 - (s.p2.temp - 20));
+
+            if (s.p2Choice.self.includes('cheer')) p2Spd += 1; if (s.p1Choice.target.includes('cheer')) p2Spd += 1;
+            let p2StoneNum = (s.p2Choice.self.includes('stone')?1:0) + (s.p1Choice.target.includes('stone')?1:0);
+            if (p2StoneNum > 0) p2Spd -= 1;
+
+            // 5. 壁(Debt)の相殺 ＆ 反動計算
+            if (p1Spd < 0) { s.p1.debt += Math.abs(p1Spd); p1Spd = 0; }
+            else if (s.p1.debt > 0) { if (p1Spd >= s.p1.debt) { p1Spd -= s.p1.debt; s.p1.debt = 0; } else { s.p1.debt -= p1Spd; p1Spd = 0; } }
+
+            if (p2Spd < 0) { s.p2.debt += Math.abs(p2Spd); p2Spd = 0; }
+            else if (s.p2.debt > 0) { if (p2Spd >= s.p2.debt) { p2Spd -= s.p2.debt; s.p2.debt = 0; } else { s.p2.debt -= p2Spd; p2Spd = 0; } }
+
+            // 6. 進捗加算
+            s.p1.progress += p1Spd;
+            s.p2.progress += p2Spd;
+
+            // 🌟【美学の執行】数値・温度・状態フレーバーを完全隠蔽。進捗のみを実況するソリッドログ
+            let resultLog = `${evText}【第 ${s.turn} ターン終了】\n・${game.p1}：現在位置 [${s.p1.progress}%]\n・${game.p2}：現在位置 [${s.p2.progress}%]`;
+
+            // 次のターンへの準備
+            s.turn++;
+            let nextP1CanEvent = (s.turn >= 15 && (s.turn - s.lastEventP1 >= 10));
+            let nextP2CanEvent = (s.turn >= 15 && (s.turn - s.lastEventP2 >= 10));
+
+            let keepsData = { p1: s.p1Choice.keep, p2: s.p2Choice.keep };
+
+            // 計算結果を両プレイヤーの画面へ一斉送信
+            io.to(roomId).emit('round_result', {
+                nextTurn: s.turn,
+                p1Progress: s.p1.progress, p2Progress: s.p2.progress,
+                p1Temp: s.p1.temp, p2Temp: s.p2.temp,
+                p1Debt: s.p1.debt, p2Debt: s.p2.debt,
+                resultLog: resultLog,
+                p1CanEvent: nextP1CanEvent, p2CanEvent: nextP2CanEvent,
+                activeEvent: activeEvent, eventSender: eventSender,
+                p1ChoiceRaw: s.p1Choice, p2ChoiceRaw: s.p2Choice,
+                keeps: keepsData
+            });
+
+            // 7. 公式戦のゴール判定（1000%到達）
+            if (s.p1.progress >= 1000 || s.p2.progress >= 1000) {
+                let winnerName = 'DRAW';
+                if (s.p1.progress > s.p2.progress) winnerName = game.p1;
+                else if (s.p2.progress > s.p1.progress) winnerName = game.p2;
+
+                let p1Name = game.p1; let p2Name = game.p2;
+                let p1Result = null; let p2Result = null;
+
+                if (winnerName === 'DRAW') {
+                    p1Result = await processPlatformRate(p1Name, false, 'draw');
+                    p2Result = await processPlatformRate(p2Name, false, 'draw');
+                } else if (winnerName === p1Name) {
+                    p1Result = await processPlatformRate(p1Name, true, 'goal');
+                    p2Result = await processPlatformRate(p2Name, false, 'goal');
+                } else if (winnerName === p2Name) {
+                    p1Result = await processPlatformRate(p1Name, false, 'goal');
+                    p2Result = await processPlatformRate(p2Name, true, 'goal');
+                }
+
+                let p1SocketId = userSocketMap[p1Name];
+                let p2SocketId = userSocketMap[p2Name];
+
+                if (p1SocketId) {
+                    io.to(p1SocketId).emit('platform_game_over', {
+                        winner: winnerName, rateChange: (winnerName === p1Name) ? p1Result.rateChange : p2Result.rateChange,
+                        newRate: p1Result.currentRate, newRank: p1Result.currentRank
+                    });
+                }
+                if (p2SocketId) {
+                    io.to(p2SocketId).emit('platform_game_over', {
+                        winner: winnerName, rateChange: (winnerName === p2Name) ? p2Result.rateChange : p1Result.rateChange,
+                        newRate: p2Result.currentRate, newRank: p2Result.currentRank
+                    });
+                }
+                delete activeGames[roomId];
+            }
+
+            // バッファリセット
+            s.p1Choice = null;
+            s.p2Choice = null;
+        }
+    });
+
+    // 【ゲーム終了申告のフォールバック】
     socket.on('submit_game_end', async (data) => {
         const username = socketUserMap[socket.id];
-        console.log(`[GAME END SIGNAL] ${username} から勝敗確定要求を受信:`, data);
-
         let roomId = null;
         for (let rId in activeGames) {
             if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
         }
-        if (!roomId) return console.log('-> [ERROR] 該当するアクティブな部屋が見つかりません');
+        if (!roomId) return;
         const game = activeGames[roomId];
 
-        if (game.isProcessingResult) return console.log('-> [WARNING] 既にリザルト計算が実行中です');
+        if (game.isProcessingResult) return;
         game.isProcessingResult = true;
 
         const { winnerUsername, resultType } = data;
-        let p1Name = game.p1;
-        let p2Name = game.p2;
-        let p1Result = null;
-        let p2Result = null;
+        let p1Name = game.p1; let p2Name = game.p2;
+        let p1Result = null; let p2Result = null;
 
         if (winnerUsername === 'DRAW') {
             p1Result = await processPlatformRate(p1Name, false, 'draw');
@@ -401,66 +515,88 @@ io.on('connection', (socket) => {
 
         if (p1SocketId) {
             io.to(p1SocketId).emit('platform_game_over', {
-                winner: winnerUsername,
-                rateChange: (winnerUsername === p1Name) ? p1Result.rateChange : p2Result.rateChange,
-                newRate: p1Result.currentRate,
-                newRank: p1Result.currentRank
+                winner: winnerUsername, rateChange: (winnerUsername === p1Name) ? p1Result.rateChange : p2Result.rateChange,
+                newRate: p1Result.currentRate, newRank: p1Result.currentRank
             });
         }
         if (p2SocketId) {
             io.to(p2SocketId).emit('platform_game_over', {
-                winner: winnerUsername,
-                rateChange: (winnerUsername === p2Name) ? p2Result.rateChange : p1Result.rateChange,
-                newRate: p2Result.currentRate,
-                newRank: p2Result.currentRank
+                winner: winnerUsername, rateChange: (winnerUsername === p2Name) ? p2Result.rateChange : p1Result.rateChange,
+                newRate: p2Result.currentRate, newRank: p2Result.currentRank
             });
         }
-
-        console.log(`[ROOM DELETED] 部屋 ${roomId} のゲーム結果処理が完了したため削除します`);
         delete activeGames[roomId];
     });
 
-    // 【切断時の処理：ロビー連打を許容し、試合中の脱走者のみを処罰】
+    // 【チャット中継】
+    socket.on('send_chat', (msg) => {
+        let roomId = null;
+        const username = socketUserMap[socket.id];
+        if (!username) return;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
+    });
+
+    // 【不戦勝・タイムアウト用】
+    socket.on('player_timeout', async (data) => {
+        const username = socketUserMap[socket.id];
+        let roomId = null;
+        for (let rId in activeGames) {
+            if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; }
+        }
+        if (!roomId) return;
+        const game = activeGames[roomId];
+        let opponent = (data.player === 1) ? game.p2 : game.p1;
+        
+        let oppResult = await processPlatformRate(opponent, true, 'immobilize');
+        let loserResult = await processPlatformRate(username, false, 'immobilize');
+
+        let p1SocketId = userSocketMap[game.p1];
+        let p2SocketId = userSocketMap[game.p2];
+
+        if (p1SocketId) {
+            io.to(p1SocketId).emit('platform_game_over', {
+                winner: opponent, rateChange: (opponent === game.p1) ? oppResult.rateChange : loserResult.rateChange,
+                newRate: (game.p1 === opponent) ? oppResult.currentRate : loserResult.currentRate,
+                newRank: (game.p1 === opponent) ? oppResult.currentRank : loserResult.currentRank
+            });
+        }
+        if (p2SocketId) {
+            io.to(p2SocketId).emit('platform_game_over', {
+                winner: opponent, rateChange: (opponent === game.p2) ? oppResult.rateChange : loserResult.rateChange,
+                newRate: (game.p2 === opponent) ? oppResult.currentRate : loserResult.currentRate,
+                newRank: (game.p2 === opponent) ? oppResult.currentRank : loserResult.currentRank
+            });
+        }
+        delete activeGames[roomId];
+    });
+
+    // 【切断時の処理】
     socket.on('disconnect', () => {
         const username = socketUserMap[socket.id];
-        console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
-        
         for (let gameId in gameQueues) {
             gameQueues[gameId] = gameQueues[gameId].filter(w => w.id !== socket.id);
         }
         delete socketUserMap[socket.id];
 
         if (username && username !== 'admin' && !username.startsWith('Guest_')) {
-            
-            // 現在アクティブな「試合部屋」に参加中かどうかを厳密チェック
-            let isInGame = false;
-            let userRoomId = null;
+            let isInGame = false; let userRoomId = null;
             for (let rId in activeGames) {
                 if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) {
-                    isInGame = true;
-                    userRoomId = rId;
-                    break;
+                    isInGame = true; userRoomId = rId; break;
                 }
             }
-
-            // 🛑 試合中の場合のみペナルティタイマーをブートする（冤罪の完全撤廃）
             if (isInGame) {
-                console.log(`⚠️ [RECONNECT TIMER] 試合中走者 [${username}] の回線切断を検知。5分間の復帰待機タイマーを始動します。`);
-                
                 reconnectTimers[username] = setTimeout(async () => {
-                    console.log(`🚨 [TIMEOUT PENALTY] ${username} が5分以内に復帰しなかったため失格処理を執行します`);
                     try {
                         const user = await User.findOne({ username });
                         if (user) {
-                            user.rate = Math.max(0, user.rate - 200);
-                            user.lose += 1;
-                            user.rank = getRank(user.rate);
-                            await user.save();
-                            console.log(`-> ペナルティDB更新完了: ${username} 新レート ${user.rate} pt / 1敗追加`);
+                            user.rate = Math.max(0, user.rate - 200); user.lose += 1;
+                            user.rank = getRank(user.rate); await user.save();
                         }
-                    } catch (e) {
-                        console.error("ペナルティDB更新中にエラー:", e);
-                    }
+                    } catch (e) { console.error(e); }
 
                     if (userRoomId && activeGames[userRoomId]) {
                         const game = activeGames[userRoomId];
@@ -470,19 +606,14 @@ io.on('connection', (socket) => {
                         let oppResult = await processPlatformRate(opponent, true, 'disconnect_win');
                         if (oppSocketId) {
                             io.to(oppSocketId).emit('platform_game_over', {
-                                winner: opponent,
-                                rateChange: oppResult.rateChange,
-                                newRate: oppResult.currentRate,
-                                newRank: oppResult.currentRank
+                                winner: opponent, rateChange: oppResult.rateChange,
+                                newRate: oppResult.currentRate, newRank: oppResult.currentRank
                             });
                         }
                         delete activeGames[userRoomId];
                     }
                     delete reconnectTimers[username];
                 }, 5 * 60 * 1000);
-
-            } else {
-                console.log(`-> [LOGOUT CLEARED] ${username} は非戦闘状態のため、安全に切断処理を行いました。`);
             }
         }
     });
@@ -500,21 +631,25 @@ setInterval(async () => {
         let p2 = queue.shift();
 
         let roomId = `room_${gameId}_${p1.username}_${p2.username}_${Date.now()}`;
-        console.log(`⚔️ [MATCH FOUND] 試合成立しました！部屋ID: ${roomId} (${p1.username} vs ${p2.username})`);
         
         p1.socket.join(roomId);
         p2.socket.join(roomId);
 
-        activeGames[roomId] = { gameId: gameId, p1: p1.username, p2: p2.username, isProcessingResult: false, state: {} };
+        activeGames[roomId] = { 
+            gameId: gameId, p1: p1.username, p2: p2.username, isProcessingResult: false, 
+            state: {
+                turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
+                p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0 },
+                p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0 },
+                p1Choice: null, p2Choice: null
+            } 
+        };
 
-        p1.socket.emit('platform_match_found', {
-            roomId: roomId, gameId: gameId, myRole: 1,
-            p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
-            p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
-        });
+        p1.socket.emit('assigned_player', 1);
+        p2.socket.emit('assigned_player', 2);
 
-        p2.socket.emit('platform_match_found', {
-            roomId: roomId, gameId: gameId, myRole: 2,
+        io.to(roomId).emit('platform_match_found', {
+            roomId: roomId, gameId: gameId,
             p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
             p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
         });
@@ -527,12 +662,9 @@ setInterval(async () => {
 async function startSecurePlatform() {
   try {
     console.log('⏳ [DB CONNECT] MongoDBへのセキュア接続を開始します...');
-    
-    // 正しい @cluster0 の記述位置で、接続フリーズを完全回避
     await mongoose.connect('mongodb+srv://gaohu1870_db_user:pe96ArnwLeCqf1S2@cluster0.4vbxzmx.mongodb.net/test?appName=Cluster0', {
       bufferCommands: false
     });
-    
     console.log('✅ [DB SUCCESS] MongoDBとの完全同期に成功。インフラ開通！');
 
     server.listen(PORT, () => {
@@ -540,10 +672,8 @@ async function startSecurePlatform() {
         console.log(` 🚀 Platform Hub Server successfully running on port ${PORT}`);
         console.log(`=======================================================`);
     });
-
   } catch (err) {
-    console.error('❌ [DB CRITICAL ERROR] データベース接続に失敗したため、サーバーの起動を非常停止しました:');
-    console.error(err);
+    console.error('❌ [DB CRITICAL ERROR] データベース接続失敗:', err);
   }
 }
 
