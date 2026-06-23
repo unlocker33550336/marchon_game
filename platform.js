@@ -41,9 +41,9 @@ let reconnectTimers = {};
 // 2. 共通レート計算システム ＆ ランク判定
 // ==========================================
 function getRank(rate) {
-  if (rate >= 2000) return "VIP";
-  else if (rate >= 1500) return "PREMIUM";
-  else if (rate >= 500) return "ELITE";
+  if (rate >= 20000) return "VIP";
+  else if (rate >= 15000) return "PREMIUM";
+  else if (rate >= 5000) return "ELITE";
   else return "NORMAL";
 }
 
