@@ -345,7 +345,7 @@ io.on('connection', (socket) => {
             if (targetPlayerState.love > targetPlayerState.dead) {
                 targetPlayerState.love += 15;
                 logMsg = `🌱${pName} の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
-            } else {
+            } else if (targetPlayerState.love < targetPlayerState.dead){
                 targetPlayerState.dead += 15;
                 logMsg = `☠️${pName} の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
             }
