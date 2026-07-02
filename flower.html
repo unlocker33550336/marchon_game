@@ -134,16 +134,46 @@
     </div>
 
     <div id="game-start-btn-panel" class="lobby-panel">
-        <h3 style="color: #9b5de5; margin-top: 0;">🪻 裏社会のブラフゲームへようこそ</h3>
+        <h3 style="color: #9b5de5; margin-top: 0;">🪻 フラワーゲームへようこそ</h3>
         <p style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.5;">
-            10ターン以内に相手を「死の花」の毒で殺すか、「愛の花（100輪）」で窒息死させろ。<br>
-            あなたがフローリストの時は3枚のカードに自由に嘘のラベルを貼り、<br>
-            チョイスの時は相手の罠を見抜いて1枚を選べ。
+            このゲームは花を送り合うゲームです。
+
+あなた達2人はチョイス側とフローリスト側を交代しながら、相手に花を送り合ってもらいます。
+両者がチョイス側とフローリスト側を行うと1ターンが経過します。ゲームは全部で10ターン行われます。
+送られた花や種は自分のいる部屋に送られていきます。では、それぞれのゲーム内での役割を紹介します。
+
+フローリスト側
+死の花、愛の花、種の3種類のカードを盤面に配置します。その後に、その3種類のカードに名前をラベリングします。この名前は必ずしも本当の名前と同じにする必要はありません。
+
+チョイス側
+フローリスト側が配置した盤面からカードを選びます。その際にチョイス側はフローリスト側がラベリングした名前が常に表示されます。選択を確定すると、選択したカードの効果が発動されます。
+
+カードについて
+
+死の花
+死の花は植えるとすぐに枯れてしまいますが、枯れた後に花から毒が放出されます。毒は猛毒ですが、死の花1輪には少量しか入っていません。毒によって愛の花を枯らせることができます。カードを1枚選ぶごとに1輪の花が植えられます。
+
+愛の花
+愛の花は相手に愛情を分け与える花で、たくさん集めることによって様々ないいことが起こります。カードを1枚選ぶごとに5輪の花が植えられます。
+
+種
+種は何の花の種かはわかりませんが、環境次第で死の花か愛の花が咲きます。カードを1枚選ぶごとに15粒の種が植えられます。
+    
+勝利条件と反則行為
+            
+勝利条件
+相手の死亡、または相手より多くの花を集めること。
+反則行為
+配置や選択をする際の5分以上の遅延。
+
+
         </p>
         <button class="action-btn" onclick="startMatch()">公式レート対戦に参加する</button>
+        <!-- 🌟【追加】思考AI戦練習モード起動トリガー -->
+        <button class="action-btn" onclick="startAIModeTrigger()" style="background: #10ac84; margin-top: 10px;">思考AI戦（練習モード）</button>
     </div>
 
-    <!-- 対戦アリーナ -->
+    <!-- 对战アリーナ -->
     <div class="battle-arena" id="battle-arena">
         
         <!-- P1 (自分) 部屋 -->
@@ -231,11 +261,20 @@
 <script>
     let socket = io();
     let myUsername = null;
-    let myRoleNum = 1; // 1 or 2
-    let currentPhaseRole = 'florist'; // 'florist' or 'choice'
+    let myRoleNum = 1; 
+    let currentPhaseRole = 'florist'; 
     let timerInterval = null;
     let secondsLeft = 300;
     
+    // 🌟【AI戦用フラグ ＆ 完全ローカル用状態定義】
+    let isAIMode = false;
+    let localAIState = {
+        turn: 1, phase: 1, florist: 1, choice: 2,
+        p1: { love: 0, dead: 0, life: 100 },
+        p2: { love: 0, dead: 0, life: 100 },
+        currentPlacement: { cards: [], labels: [] }
+    };
+
     // 配置データ
     let placedCards = [null, null, null];
     let placedLabels = [null, null, null];
@@ -282,9 +321,8 @@
 
     socket.on('assigned_player', (num) => { myRoleNum = num; });
 
-    // ゲーム進行系
+    // ゲーム進行系（オンライン）
     socket.on('flower_start_phase', (data) => {
-        // data: { florist: 1/2, choice: 1/2, turn: int, phase: 1/2 }
         document.getElementById('turn-display').innerText = `${data.turn} / 10`;
         currentPhaseRole = (data.florist === myRoleNum) ? 'florist' : 'choice';
         
@@ -310,15 +348,12 @@
     });
 
     socket.on('flower_opponent_placed', (data) => {
-        // 相手が配置完了した。チョイス側のアクション開始。
-        // data: { labels: ['sun', 'stone', 'seed'] }
         if (currentPhaseRole !== 'choice') return;
         
         unlockBoard();
         document.getElementById('role-title').innerText = "【チョイス】1輪選べ";
-        document.getElementById('rotation-wrapper').classList.add('rotate-to-choice'); // 盤面回転演出
+        document.getElementById('rotation-wrapper').classList.add('rotate-to-choice'); 
         
-        // 伏せカードと相手のラベルを表示
         const labelMap = { 'sun': '愛', 'stone': '死', 'seed': '種' };
         for(let i=0; i<3; i++) {
             const slot = document.getElementById(`slot-${i}`);
@@ -328,21 +363,17 @@
     });
 
     socket.on('flower_phase_result', (data) => {
-        // data: { selectedIndex: int, cardType: str, p1: state, p2: state, log: str }
         writeLog(data.log);
-        // 選ばれたカードをオープン
         const slot = document.getElementById(`slot-${data.selectedIndex}`);
         const typeMap = { 'sun': '愛の花', 'stone': '死の花', 'seed': '種' };
         if(slot && slot.querySelector('.game-card')) {
             slot.querySelector('.game-card').className = `game-card type-${data.cardType}`;
             slot.querySelector('.game-card').innerText = typeMap[data.cardType];
         }
-        
         updateRooms(data);
     });
 
     socket.on('flower_turn_end_result', (data) => {
-        // ターン終了（毒ダメージ等の計算後）
         updateRooms(data);
         if(data.log) writeLog(data.log);
     });
@@ -353,13 +384,18 @@
         setTimeout(() => {
             let msg = (result.winner === myUsername) ? `【大勝利】共通レート変動: +${result.rateChange} pt` : `【敗北】共通レート変動: -${result.rateChange} pt`;
             if (result.winner === 'DRAW') msg = "【引き分け】";
-            alert(`${msg}
-最新レート: ${result.newRate} pt (${result.newRank})`);
+            alert(`${msg}\n最新レート: ${result.newRate} pt (${result.newRank})`);
             location.href = '/';
         }, 3000);
     });
 
+    // 🌟【核心】アクション確定ボタンの分岐（オンライン or AI練習）
     function submitAction() {
+        if (isAIMode) {
+            submitActionLocal();
+            return;
+        }
+
         if (currentPhaseRole === 'florist') {
             if (placedCards.includes(null) || placedLabels.includes(null)) {
                 return alert("3つの枠すべてにカードとラベルを配置してください！");
@@ -393,14 +429,13 @@
             slot.addEventListener('dragover', e => e.preventDefault());
             slot.addEventListener('drop', e => {
                 e.preventDefault();
-                const id = e.dataTransfer.getData('text/plain');
+                const id = e.dataTransfer.setData('text/plain');
                 const draggedEl = document.getElementById(id);
                 if(!draggedEl) return;
                 
                 const type = draggedEl.dataset.type;
                 const itemType = draggedEl.dataset.itemtype;
 
-                // スロット内に既にある同種要素をソースに戻す
                 Array.from(slot.children).forEach(child => {
                     if (child.dataset && child.dataset.itemtype === itemType) {
                         document.getElementById(itemType === 'card' ? 'card-source' : 'label-source').appendChild(child);
@@ -414,7 +449,6 @@
             });
         }
         
-        // ソースエリアに戻す用
         document.getElementById('source-area').addEventListener('dragover', e => e.preventDefault());
         document.getElementById('source-area').addEventListener('drop', e => {
             e.preventDefault();
@@ -470,14 +504,12 @@
         document.getElementById('opp-love-cnt').innerText = oppState.love;
         document.getElementById('opp-dead-cnt').innerText = oppState.dead;
 
-        // 花の描画差分追加
         drawFlowers('my-flower-container', myState.love, myState.dead, myLovePrev, myDeadPrev);
         drawFlowers('opp-flower-container', oppState.love, oppState.dead, oppLovePrev, oppDeadPrev);
 
         myLovePrev = myState.love; myDeadPrev = myState.dead;
         oppLovePrev = oppState.love; oppDeadPrev = oppState.dead;
 
-        // 身体的反応レイヤーの更新（自分のみ）
         const reactionLayer = document.getElementById('body-reaction-layer');
         let poisonLvl = myState.dead;
         let loveLvl = myState.love;
@@ -507,7 +539,6 @@
         let addLove = totalLove - prevLove;
         let addDead = totalDead - prevDead;
         
-        // 減った場合（愛が枯れた場合）は要素を削除
         if (addLove < 0) {
             const loves = container.querySelectorAll('.flower-icon.love');
             for(let i=0; i<Math.abs(addLove) && i<loves.length; i++) loves[i].remove();
@@ -519,7 +550,6 @@
                 const el = document.createElement('div');
                 el.className = `flower-icon ${type}`;
                 el.innerText = char;
-                // 円形内にランダム配置
                 const angle = Math.random() * Math.PI * 2;
                 const radius = Math.random() * 90 + 10;
                 const x = 120 + Math.cos(angle) * radius - 8;
@@ -542,7 +572,13 @@
             secondsLeft--; updateTimerUI();
             if(secondsLeft <= 0) {
                 clearInterval(timerInterval);
-                socket.emit('flower_player_timeout', { player: myRoleNum });
+                if (isAIMode) {
+                    lockBoard("遅延失格！");
+                    alert("5分以上の制限時間切れにより失格・ゲームオーバーです。");
+                    location.href = '/';
+                } else {
+                    socket.emit('flower_player_timeout', { player: myRoleNum });
+                }
             }
         }, 1000);
     }
@@ -551,10 +587,234 @@
         document.getElementById('timer-display').innerText = `${m}:${s}`;
     }
 
-    function writeLog(msg) { const logs = document.getElementById('chat-logs'); logs.innerHTML += `
-${msg}`; logs.scrollTop = logs.scrollHeight; }
-    function sendChat() { const inp = document.getElementById('chat-input'); if(!inp.value.trim()) return; socket.emit('send_chat', `${myUsername}: ${inp.value}`); inp.value=''; }
+    function writeLog(msg) { const logs = document.getElementById('chat-logs'); logs.innerHTML += `\n${msg}`; logs.scrollTop = logs.scrollHeight; }
+    function sendChat() { const inp = document.getElementById('chat-input'); if(!inp.value.trim() || isAIMode) return; socket.emit('send_chat', `${myUsername}: ${inp.value}`); inp.value=''; }
     socket.on('receive_chat', (msg) => writeLog(msg));
+
+
+    // ==========================================
+    // 🤖【完全追加】思考AI対戦練習モード・数理シミュレータ
+    // ==========================================
+    function startAIModeTrigger() {
+        isAIMode = true;
+        myRoleNum = 1; // あなたはP1、AIはP2
+        currentPhaseRole = 'florist';
+
+        document.getElementById('game-start-btn-panel').classList.add('hidden');
+        document.getElementById('battle-arena').style.display = 'grid';
+        
+        document.getElementById('my-name').innerHTML = `${myUsername || "YOU"} <span style="color:#aaa; font-size:10px;">[AI練習戦]</span>`;
+        document.getElementById('opp-name').innerHTML = `思考AI <span style="color:#aaa; font-size:10px;">[LEVEL 1]</span>`;
+        
+        writeLog("【システム】思考AI対戦（練習モード）を開始しました。目標1000%…ではなく100輪窒息または毒殺！");
+        
+        document.getElementById('turn-display').innerText = `1 / 10`;
+        resetBoard();
+        unlockBoard();
+        startTimer(300);
+
+        document.getElementById('role-title').innerText = "【フローリスト】罠を配置せよ";
+        document.getElementById('role-title').style.color = "#ff4757";
+        document.getElementById('source-area').style.display = 'block';
+        document.getElementById('choice-btn-row').style.display = 'none';
+        document.getElementById('rotation-wrapper').classList.remove('rotate-to-choice');
+        setupDragAndDrop();
+    }
+
+    // AI練習モード用のアクション確定処理
+    function submitActionLocal() {
+        clearInterval(timerInterval);
+        
+        if (currentPhaseRole === 'florist') {
+            // あなたが配置したターン
+            if (placedCards.includes(null) || placedLabels.includes(null)) {
+                alert("3つの枠すべてにカードとラベルを配置してください！");
+                startTimer(secondsLeft); return;
+            }
+            lockBoard("AIがカードを思考・選択中...");
+            
+            // 2秒後にAIがチョイスを実行
+            setTimeout(() => { executeAIChoiceLogic(); }, 1500);
+        } else {
+            // あなたが選択したターン
+            if (selectedChoiceIndex === -1) {
+                alert("カードを1枚選んでください！");
+                startTimer(secondsLeft); return;
+            }
+            lockBoard("結果を判定中...");
+            setTimeout(() => { executePlayerChoiceLocalLogic(); }, 1000);
+        }
+    }
+
+    // AI側のチョイス（ランダムな3択）
+    function executeAIChoiceLogic() {
+        let aiChoiceIdx = Math.floor(Math.random() * 3);
+        let selectedCard = placedCards[aiChoiceIdx];
+        let targetPlayerState = localAIState.p2; // AIの部屋へ
+
+        let logMsg = ``;
+        if (selectedCard === 'sun') {
+            targetPlayerState.love += 5;
+            logMsg = `★思考AI は [愛の花] を選んだ。（愛の花 +5輪）`;
+        } else if (selectedCard === 'stone') {
+            targetPlayerState.dead += 1;
+            let killedLove = Math.min(2, targetPlayerState.love);
+            targetPlayerState.love -= killedLove;
+            logMsg = `💀思考AI は [死の花] を引いてしまった！（死の花 +1輪 / 愛の花 -${killedLove}輪）`;
+        } else if (selectedCard === 'seed') {
+            if (targetPlayerState.love > targetPlayerState.dead) {
+                targetPlayerState.love += 15;
+                logMsg = `🌱思考AI の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
+            } else {
+                targetPlayerState.dead += 15;
+                logMsg = `☠️思考AI の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
+            }
+        }
+
+        writeLog(logMsg);
+        const slot = document.getElementById(`slot-${aiChoiceIdx}`);
+        const typeMap = { 'sun': '愛の花', 'stone': '死の花', 'seed': '種' };
+        if(slot && slot.querySelector('.game-card')) {
+            slot.querySelector('.game-card').className = `game-card type-${selectedCard}`;
+            slot.querySelector('.game-card').innerText = typeMap[selectedCard];
+        }
+
+        updateRooms(localAIState);
+
+        // フェーズ2（AIが配置、あなたが選択）へ移行
+        setTimeout(() => {
+            localAIState.phase = 2;
+            localAIState.florist = 2;
+            localAIState.choice = 1;
+            currentPhaseRole = 'choice';
+
+            resetBoard();
+            document.getElementById('confirm-btn').style.display = 'none';
+            lockBoard("AIが裏で花とラベルを偽装中...");
+
+            // 1.5秒後にAIの配置をオープン
+            setTimeout(() => { executeAIFloristPlacementLogic(); }, 1500);
+        }, 2000);
+    }
+
+    // AI側のフローリスト配置（カードとラベルをシャッフル）
+    function executeAIFloristPlacementLogic() {
+        let cards = ['sun', 'stone', 'seed'];
+        let labels = ['sun', 'stone', 'seed'];
+        
+        // 完全シャッフル（ブラフ生成）
+        cards.sort(() => Math.random() - 0.5);
+        labels.sort(() => Math.random() - 0.5);
+        
+        localAIState.currentPlacement = { cards: cards, labels: labels };
+
+        unlockBoard();
+        document.getElementById('role-title').innerText = "【チョイス】1輪選べ（AIが配置完了）";
+        document.getElementById('role-title').style.color = "#3b82f6";
+        document.getElementById('rotation-wrapper').classList.add('rotate-to-choice'); 
+
+        const labelMap = { 'sun': '愛', 'stone': '死', 'seed': '種' };
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            slot.innerHTML = `<div class="slot-label-display">${labelMap[labels[i]]}</div><div class="game-card type-mystery">?</div>`;
+        }
+        document.getElementById('choice-btn-row').style.display = 'flex';
+        startTimer(300);
+    }
+
+    // あなたがAIのカードを選択した後のローカル計算
+    function executePlayerChoiceLocalLogic() {
+        let idx = selectedChoiceIndex;
+        let selectedCard = localAIState.currentPlacement.cards[idx];
+        let targetPlayerState = localAIState.p1; // あなたの部屋へ
+
+        let logMsg = ``;
+        if (selectedCard === 'sun') {
+            targetPlayerState.love += 5;
+            logMsg = `★あなた は [愛の花] を選んだ。（愛の花 +5輪）`;
+        } else if (selectedCard === 'stone') {
+            targetPlayerState.dead += 1;
+            let killedLove = Math.min(2, targetPlayerState.love);
+            targetPlayerState.love -= killedLove;
+            logMsg = `💀あなた は [死の花] を引いてしまった！（死の花 +1輪 / 愛の花 -${killedLove}輪）`;
+        } else if (selectedCard === 'seed') {
+            if (targetPlayerState.love > targetPlayerState.dead) {
+                targetPlayerState.love += 15;
+                logMsg = `🌱あなた の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
+            } else {
+                targetPlayerState.dead += 15;
+                logMsg = `☠️あなた の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
+            }
+        }
+
+        writeLog(logMsg);
+        const slot = document.getElementById(`slot-${idx}`);
+        const typeMap = { 'sun': '愛の花', 'stone': '死の花', 'seed': '種' };
+        if(slot && slot.querySelector('.game-card')) {
+            slot.querySelector('.game-card').className = `game-card type-${selectedCard}`;
+            slot.querySelector('.game-card').innerText = typeMap[selectedCard];
+        }
+
+        updateRooms(localAIState);
+
+        // 1ターン完了処理（スリップダメージ・生死の数理判定）
+        setTimeout(() => {
+            let d1 = localAIState.p1.dead;
+            let d2 = localAIState.p2.dead;
+            if(d1 > 0) localAIState.p1.life -= Math.pow(1.2, d1);
+            if(d2 > 0) localAIState.p2.life -= Math.pow(1.2, d2);
+
+            let p1DeathCause = null; let p2DeathCause = null;
+            if (localAIState.p1.love >= 100) p1DeathCause = "窒息中毒死"; else if (localAIState.p1.life <= 0) p1DeathCause = "猛毒ショ死";
+            if (localAIState.p2.love >= 100) p2DeathCause = "窒息中毒死"; else if (localAIState.p2.life <= 0) p2DeathCause = "猛毒ショ死";
+
+            let turnLog = `【第 ${localAIState.turn} ターン終了】\n`;
+            if(d1 > 0) turnLog += `・あなた は毒に蝕まれている。(残命: ${Math.max(0, localAIState.p1.life).toFixed(1)}%)\n`;
+            if(d2 > 0) turnLog += `・思考AI は毒に蝕まれている。(残命: ${Math.max(0, localAIState.p2.life).toFixed(1)}%)\n`;
+            writeLog(turnLog);
+
+            updateRooms(localAIState);
+
+            let isGameOver = false;
+            let localWinner = '';
+
+            if (p1DeathCause || p2DeathCause) {
+                isGameOver = true;
+                if (p1DeathCause && p2DeathCause) localWinner = 'DRAW';
+                else if (p1DeathCause) localWinner = '思考AI';
+                else localWinner = 'あなた';
+            } else if (localAIState.turn >= 10) {
+                isGameOver = true;
+                if (localAIState.p1.love > localAIState.p2.love) localWinner = 'あなた';
+                else if (localAIState.p2.love > localAIState.p1.love) localWinner = '思考AI';
+                else localWinner = 'DRAW';
+            }
+
+            if (isGameOver) {
+                lockBoard("決着！");
+                alert(`【AI戦 最終リザルト】\n勝者: ${localWinner}\nあなたの愛の花: ${localAIState.p1.love}輪 / 毒残骸: ${localAIState.p1.dead}輪\nAIの愛の花: ${localAIState.p2.love}輪 / 毒残骸: ${localAIState.p2.dead}輪`);
+                location.href = '/';
+            } else {
+                // 次のターンへ
+                localAIState.turn++;
+                localAIState.phase = 1;
+                localAIState.florist = 1;
+                localAIState.choice = 2;
+                currentPhaseRole = 'florist';
+
+                document.getElementById('turn-display').innerText = `${localAIState.turn} / 10`;
+                document.getElementById('role-title').innerText = "【フローリスト】罠を配置せよ";
+                document.getElementById('role-title').style.color = "#ff4757";
+                document.getElementById('source-area').style.display = 'block';
+                document.getElementById('choice-btn-row').style.display = 'none';
+                document.getElementById('rotation-wrapper').classList.remove('rotate-to-choice');
+
+                resetBoard();
+                unlockBoard();
+                startTimer(300);
+            }
+        }, 2000);
+    }
 
 </script>
 </body>
