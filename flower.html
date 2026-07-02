@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE PLATFORM - FLOWER GAME🪻</title>
+    <style>
+        :root {
+            --poison-level: 0;
+            --love-level: 0;
+            --poison-shadow: rgba(0,0,0,0);
+            --love-shadow: rgba(255, 105, 180, 0);
+        }
+
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #0d0d12; color: #e0e0e0; padding: 10px; margin: 0; user-select: none; overflow: hidden; }
+        
+        /* ☠️ 毒と愛の身体反応エフェクトレイヤー */
+        #body-reaction-layer {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999;
+            box-shadow: inset 0 0 calc(var(--poison-level) * 15px) calc(var(--poison-level) * 5px) var(--poison-shadow),
+                        inset 0 0 calc(var(--love-level) * 10px) calc(var(--love-level) * 3px) var(--love-shadow);
+            transition: box-shadow 1s ease-in-out;
+        }
+
+        /* 毒のパニック揺れエフェクト */
+        @keyframes poison-shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(calc(var(--poison-level) * 0.5px), calc(var(--poison-level) * 0.5px)) rotate(calc(var(--poison-level) * 0.1deg)); }
+            50% { transform: translate(calc(var(--poison-level) * -0.5px), calc(var(--poison-level) * -0.5px)) rotate(calc(var(--poison-level) * -0.1deg)); }
+            75% { transform: translate(calc(var(--poison-level) * -0.5px), calc(var(--poison-level) * 0.5px)) rotate(calc(var(--poison-level) * 0.1deg)); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+
+        /* 愛の酩酊（ピンク明滅）エフェクト */
+        @keyframes love-pulse {
+            0% { opacity: 0.1; }
+            50% { opacity: calc(0.1 + var(--love-level) * 0.005); background: rgba(255, 105, 180, 0.2); }
+            100% { opacity: 0.1; }
+        }
+
+        #body-reaction-layer.shaking { animation: poison-shake 0.2s infinite; }
+        #body-reaction-layer.pulsing::before { content: ''; position: absolute; top:0; left:0; right:0; bottom:0; animation: love-pulse 2s infinite ease-in-out; }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 5px; position: relative; z-index: 10; }
+        
+        .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .back-btn { background: #333; color: #ccc; border: 1px solid #444; padding: 5px 12px; font-size: 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        h1 { margin: 0; font-size: 20px; color: #9b5de5; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 8px rgba(155,93,229,0.3); }
+
+        .lobby-panel, .info-panel { background: #15151a; border: 1px solid #2d2d3d; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 15px; }
+        .action-btn { background: #9b5de5; color: #fff; border: none; padding: 12px; width: 100%; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; transition: 0.2s; }
+        .action-btn:hover { background: #b5179e; }
+        .action-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        /* 部屋（視覚化）レイアウト */
+        .battle-arena { display: grid; grid-template-columns: 250px 1fr 250px; gap: 10px; margin-bottom: 15px; display: none; }
+        
+        .player-room { background: #1a1a24; border: 2px solid #333; border-radius: 50%; width: 240px; height: 240px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; margin: 0 auto; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+        .player-figure { font-size: 30px; position: relative; z-index: 5; }
+        .flower-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none; }
+        .flower-icon { position: absolute; font-size: 16px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); transform: scale(0); animation: pop 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { to { transform: scale(1); } }
+        
+        .room-stats { text-align: center; margin-top: 10px; font-size: 12px; font-weight: bold; }
+        .room-stats .name { font-size: 14px; margin-bottom: 5px; }
+        .room-stats .love-cnt { color: #ff6b81; }
+        .room-stats .dead-cnt { color: #57606f; }
+
+        /* 中央盤面 */
+        .center-board { background: #1c1c24; border: 1px solid #333; border-radius: 12px; padding: 15px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+        .board-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; color: #aaa; margin-bottom: 10px; border-bottom: 1px dashed #333; padding-bottom: 5px; }
+        
+        .turn-display { font-size: 18px; color: #00d2d3; font-family: monospace; }
+        
+        /* 回転演出コンテナ */
+        .board-rotation-wrapper { transition: transform 1s cubic-bezier(0.68, -0.55, 0.265, 1.55); transform-style: preserve-3d; perspective: 1000px; }
+        .board-rotation-wrapper.rotate-to-choice { transform: rotateX(360deg); }
+
+        .role-title { text-align: center; font-size: 14px; color: #fff; font-weight: bold; margin-bottom: 15px; letter-spacing: 2px; }
+        
+        /* 配置枠 */
+        .placement-row { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .placement-slot { width: 70px; height: 95px; border: 2px dashed #555; border-radius: 8px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; transition: border-color 0.2s; cursor: pointer; }
+        .placement-slot.selected { border-color: #00d2d3; box-shadow: 0 0 10px rgba(0,210,211,0.5); }
+        
+        .slot-label-display { position: absolute; top: -12px; background: #333; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid #555; pointer-events: none; font-weight: bold; color: #fff; }
+
+        /* 手札とラベルのソースエリア (フローリスト用) */
+        .source-area { background: #15151a; border: 1px solid #333; border-radius: 8px; padding: 10px; margin-bottom: 10px; display: none; }
+        .source-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .source-title { font-size: 10px; color: #888; text-align: center; margin-bottom: 5px; }
+
+        /* カードとラベルのスタイル */
+        .game-card, .label-item { border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; cursor: grab; box-shadow: 0 2px 5px rgba(0,0,0,0.5); user-select: none; }
+        .game-card { width: 60px; height: 80px; }
+        .label-item { width: 50px; height: 24px; font-size: 10px; border: 1px solid #444; }
+        
+        .type-sun { background: linear-gradient(135deg, #ff9f43, #ff5252); color: white; }
+        .type-stone { background: linear-gradient(135deg, #57606f, #2f3542); color: white; }
+        .type-seed { background: linear-gradient(135deg, #10ac84, #1dd1a1); color: white; }
+        .type-mystery { background: #2d2d3d; border: 1px solid #555; color: #aaa; font-size: 20px; }
+
+        /* チョイス用ボタン */
+        .choice-btn-row { display: none; justify-content: center; gap: 15px; margin-bottom: 10px; }
+        .select-target-btn { width: 70px; padding: 8px 0; background: #3b82f6; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .select-target-btn:hover { background: #2563eb; }
+
+        .chat-area { background: #15151a; border: 1px solid #2d2d3d; border-radius: 12px; padding: 10px; }
+        .chat-logs { max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #4cd137; white-space: pre-wrap; line-height: 1.4; margin-bottom: 8px; }
+        .chat-input-wrapper { display: flex; gap: 5px; }
+        .chat-input-wrapper input { flex: 1; padding: 8px; background: #26262b; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px; }
+        
+        .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 50; display: none; border-radius: 12px; justify-content: center; align-items: center; font-weight: bold; font-size: 18px; color: #fff; }
+        .hidden { display: none !important; }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+<div id="body-reaction-layer"></div>
+
+<div class="container">
+    <div class="nav-bar">
+        <button class="back-btn" onclick="location.href='/'">↩ ロビーへ帰還</button>
+        <h1>FLOWER GAME</h1>
+        <div style="width:90px;"></div>
+    </div>
+
+    <!-- マッチング待ち画面 -->
+    <div id="matching-panel" class="lobby-panel hidden">
+        <h3 style="color: #9b5de5;">対戦相手を探索中...</h3>
+        <p id="matching-timer" style="font-size: 18px; font-weight: bold;">経過時間: 0秒</p>
+        <button class="action-btn" onclick="cancelMatch()" style="background: #444; margin-top: 10px; width: 50%;">キャンセル</button>
+    </div>
+
+    <div id="game-start-btn-panel" class="lobby-panel">
+        <h3 style="color: #9b5de5; margin-top: 0;">🪻 裏社会のブラフゲームへようこそ</h3>
+        <p style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.5;">
+            10ターン以内に相手を「死の花」の毒で殺すか、「愛の花（100輪）」で窒息死させろ。<br>
+            あなたがフローリストの時は3枚のカードに自由に嘘のラベルを貼り、<br>
+            チョイスの時は相手の罠を見抜いて1枚を選べ。
+        </p>
+        <button class="action-btn" onclick="startMatch()">公式レート対戦に参加する</button>
+    </div>
+
+    <!-- 対戦アリーナ -->
+    <div class="battle-arena" id="battle-arena">
+        
+        <!-- P1 (自分) 部屋 -->
+        <div>
+            <div class="player-room" id="my-room">
+                <div class="player-figure">👤</div>
+                <div class="flower-container" id="my-flower-container"></div>
+            </div>
+            <div class="room-stats">
+                <div class="name" id="my-name">YOU <span id="my-rate" style="color:#aaa; font-weight:normal; font-size:10px;"></span></div>
+                <div>🌸 愛の花: <span class="love-cnt" id="my-love-cnt">0</span> / 100 輪</div>
+                <div>💀 死の花: <span class="dead-cnt" id="my-dead-cnt">0</span> 輪</div>
+            </div>
+        </div>
+
+        <!-- 中央盤面 -->
+        <div class="center-board">
+            <div class="lock-overlay" id="board-lock">相手の行動を待機中...</div>
+            <div class="board-header">
+                <div>TURN: <span class="turn-display" id="turn-display">1 / 10</span></div>
+                <div style="color: #f59e0b;" id="timer-display">05:00</div>
+            </div>
+
+            <div class="board-rotation-wrapper" id="rotation-wrapper">
+                <div class="role-title" id="role-title">【フローリスト側】配置せよ</div>
+                
+                <!-- 配置スロット -->
+                <div class="placement-row">
+                    <div class="placement-slot" id="slot-0" data-idx="0"></div>
+                    <div class="placement-slot" id="slot-1" data-idx="1"></div>
+                    <div class="placement-slot" id="slot-2" data-idx="2"></div>
+                </div>
+            </div>
+
+            <!-- チョイス用ボタン -->
+            <div class="choice-btn-row" id="choice-btn-row">
+                <button class="select-target-btn" onclick="selectCard(0)">選ぶ</button>
+                <button class="select-target-btn" onclick="selectCard(1)">選ぶ</button>
+                <button class="select-target-btn" onclick="selectCard(2)">選ぶ</button>
+            </div>
+
+            <!-- フローリスト用ソースエリア -->
+            <div class="source-area" id="source-area">
+                <div class="source-title">実体カード（裏向きに配置されます）</div>
+                <div class="source-row" id="card-source">
+                    <div class="game-card type-sun" draggable="true" id="c-sun" data-type="sun" data-itemtype="card">愛の花</div>
+                    <div class="game-card type-stone" draggable="true" id="c-stone" data-type="stone" data-itemtype="card">死の花</div>
+                    <div class="game-card type-seed" draggable="true" id="c-seed" data-type="seed" data-itemtype="card">種</div>
+                </div>
+                <div class="source-title">嘘と真実のラベル</div>
+                <div class="source-row" id="label-source">
+                    <div class="label-item type-sun" draggable="true" id="l-sun" data-type="sun" data-itemtype="label">愛</div>
+                    <div class="label-item type-stone" draggable="true" id="l-stone" data-type="stone" data-itemtype="label">死</div>
+                    <div class="label-item type-seed" draggable="true" id="l-seed" data-type="seed" data-itemtype="label">種</div>
+                </div>
+            </div>
+
+            <button class="action-btn" id="confirm-btn" onclick="submitAction()">配置を確定する</button>
+        </div>
+
+        <!-- P2 (相手) 部屋 -->
+        <div>
+            <div class="player-room" id="opp-room">
+                <div class="player-figure">👤</div>
+                <div class="flower-container" id="opp-flower-container"></div>
+            </div>
+            <div class="room-stats">
+                <div class="name" id="opp-name">ENEMY <span id="opp-rate" style="color:#aaa; font-weight:normal; font-size:10px;"></span></div>
+                <div>🌸 愛の花: <span class="love-cnt" id="opp-love-cnt">0</span> / 100 輪</div>
+                <div>💀 死の花: <span class="dead-cnt" id="opp-dead-cnt">0</span> 輪</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- チャットエリア -->
+    <div class="chat-area hidden" id="chat-area">
+        <div class="chat-logs" id="chat-logs">【システム】フラワールームに接続しました。</div>
+        <div class="chat-input-wrapper">
+            <input type="text" id="chat-input" placeholder="心理を揺さぶれ..." onkeydown="if(event.key==='Enter')sendChat()">
+            <button class="action-btn" style="width: 80px; padding: 8px;" onclick="sendChat()">送信</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let socket = io();
+    let myUsername = null;
+    let myRoleNum = 1; // 1 or 2
+    let currentPhaseRole = 'florist'; // 'florist' or 'choice'
+    let timerInterval = null;
+    let secondsLeft = 300;
+    
+    // 配置データ
+    let placedCards = [null, null, null];
+    let placedLabels = [null, null, null];
+    let selectedChoiceIndex = -1;
+
+    window.onload = function() {
+        const token = localStorage.getItem('marathon_token');
+        myUsername = localStorage.getItem('marathon_user');
+        if (token && myUsername) {
+            socket.emit('login', { username: myUsername, token: token });
+        } else {
+            alert("認証エラー"); location.href = '/';
+        }
+    };
+
+    socket.on('login_res', (res) => { if(!res.success) location.href = '/'; });
+
+    // マッチング系
+    let matchTimer = null; let mSec = 0;
+    function startMatch() {
+        document.getElementById('game-start-btn-panel').classList.add('hidden');
+        document.getElementById('matching-panel').classList.remove('hidden');
+        socket.emit('join_matchmaking', { gameId: 'flower' });
+        mSec = 0; matchTimer = setInterval(() => { mSec++; document.getElementById('matching-timer').innerText = `経過時間: ${mSec}秒`; }, 1000);
+    }
+    function cancelMatch() {
+        socket.emit('leave_matchmaking');
+        clearInterval(matchTimer);
+        document.getElementById('matching-panel').classList.add('hidden');
+        document.getElementById('game-start-btn-panel').classList.remove('hidden');
+    }
+
+    socket.on('platform_match_found', (data) => {
+        if(data.gameId !== 'flower') return;
+        clearInterval(matchTimer);
+        document.getElementById('matching-panel').classList.add('hidden');
+        document.getElementById('battle-arena').style.display = 'grid';
+        document.getElementById('chat-area').classList.remove('hidden');
+
+        let oppData = data.p1.username === myUsername ? data.p2 : data.p1;
+        document.getElementById('my-name').innerHTML = `${myUsername} <span style="color:#aaa; font-size:10px;">[${data.p1.username === myUsername ? data.p1.rate : data.p2.rate}pt]</span>`;
+        document.getElementById('opp-name').innerHTML = `${oppData.username} <span style="color:#aaa; font-size:10px;">[${oppData.rate}pt]</span>`;
+    });
+
+    socket.on('assigned_player', (num) => { myRoleNum = num; });
+
+    // ゲーム進行系
+    socket.on('flower_start_phase', (data) => {
+        // data: { florist: 1/2, choice: 1/2, turn: int, phase: 1/2 }
+        document.getElementById('turn-display').innerText = `${data.turn} / 10`;
+        currentPhaseRole = (data.florist === myRoleNum) ? 'florist' : 'choice';
+        
+        resetBoard();
+        unlockBoard();
+        startTimer(300);
+
+        if (currentPhaseRole === 'florist') {
+            document.getElementById('role-title').innerText = "【フローリスト】罠を配置せよ";
+            document.getElementById('role-title').style.color = "#ff4757";
+            document.getElementById('source-area').style.display = 'block';
+            document.getElementById('choice-btn-row').style.display = 'none';
+            document.getElementById('rotation-wrapper').classList.remove('rotate-to-choice');
+            setupDragAndDrop();
+        } else {
+            document.getElementById('role-title').innerText = "【チョイス】相手の配置を待機中...";
+            document.getElementById('role-title').style.color = "#3b82f6";
+            document.getElementById('source-area').style.display = 'none';
+            document.getElementById('choice-btn-row').style.display = 'none';
+            document.getElementById('confirm-btn').style.display = 'none';
+            lockBoard("相手が花を準備しています...");
+        }
+    });
+
+    socket.on('flower_opponent_placed', (data) => {
+        // 相手が配置完了した。チョイス側のアクション開始。
+        // data: { labels: ['sun', 'stone', 'seed'] }
+        if (currentPhaseRole !== 'choice') return;
+        
+        unlockBoard();
+        document.getElementById('role-title').innerText = "【チョイス】1輪選べ";
+        document.getElementById('rotation-wrapper').classList.add('rotate-to-choice'); // 盤面回転演出
+        
+        // 伏せカードと相手のラベルを表示
+        const labelMap = { 'sun': '愛', 'stone': '死', 'seed': '種' };
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            slot.innerHTML = `<div class="slot-label-display">${labelMap[data.labels[i]]}</div><div class="game-card type-mystery">?</div>`;
+        }
+        document.getElementById('choice-btn-row').style.display = 'flex';
+    });
+
+    socket.on('flower_phase_result', (data) => {
+        // data: { selectedIndex: int, cardType: str, p1: state, p2: state, log: str }
+        writeLog(data.log);
+        // 選ばれたカードをオープン
+        const slot = document.getElementById(`slot-${data.selectedIndex}`);
+        const typeMap = { 'sun': '愛の花', 'stone': '死の花', 'seed': '種' };
+        if(slot && slot.querySelector('.game-card')) {
+            slot.querySelector('.game-card').className = `game-card type-${data.cardType}`;
+            slot.querySelector('.game-card').innerText = typeMap[data.cardType];
+        }
+        
+        updateRooms(data);
+    });
+
+    socket.on('flower_turn_end_result', (data) => {
+        // ターン終了（毒ダメージ等の計算後）
+        updateRooms(data);
+        if(data.log) writeLog(data.log);
+    });
+
+    socket.on('platform_game_over', (result) => {
+        clearInterval(timerInterval);
+        lockBoard("決着！");
+        setTimeout(() => {
+            let msg = (result.winner === myUsername) ? `【大勝利】共通レート変動: +${result.rateChange} pt` : `【敗北】共通レート変動: -${result.rateChange} pt`;
+            if (result.winner === 'DRAW') msg = "【引き分け】";
+            alert(`${msg}
+最新レート: ${result.newRate} pt (${result.newRank})`);
+            location.href = '/';
+        }, 3000);
+    });
+
+    function submitAction() {
+        if (currentPhaseRole === 'florist') {
+            if (placedCards.includes(null) || placedLabels.includes(null)) {
+                return alert("3つの枠すべてにカードとラベルを配置してください！");
+            }
+            lockBoard("相手の選択を待機中...");
+            socket.emit('flower_submit_placement', { player: myRoleNum, cards: placedCards, labels: placedLabels });
+        } else {
+            if (selectedChoiceIndex === -1) return alert("カードを1枚選んでください！");
+            lockBoard("結果判定中...");
+            socket.emit('flower_submit_choice', { player: myRoleNum, choiceIndex: selectedChoiceIndex });
+        }
+    }
+
+    function selectCard(idx) {
+        selectedChoiceIndex = idx;
+        document.querySelectorAll('.placement-slot').forEach(s => s.classList.remove('selected'));
+        document.getElementById(`slot-${idx}`).classList.add('selected');
+        document.getElementById('confirm-btn').style.display = 'block';
+    }
+
+    // --- ドラッグ＆ドロップ実装 (フローリスト用) ---
+    function setupDragAndDrop() {
+        document.querySelectorAll('.game-card[draggable="true"], .label-item[draggable="true"]').forEach(el => {
+            el.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', e.target.id);
+            });
+        });
+
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            slot.addEventListener('dragover', e => e.preventDefault());
+            slot.addEventListener('drop', e => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData('text/plain');
+                const draggedEl = document.getElementById(id);
+                if(!draggedEl) return;
+                
+                const type = draggedEl.dataset.type;
+                const itemType = draggedEl.dataset.itemtype;
+
+                // スロット内に既にある同種要素をソースに戻す
+                Array.from(slot.children).forEach(child => {
+                    if (child.dataset && child.dataset.itemtype === itemType) {
+                        document.getElementById(itemType === 'card' ? 'card-source' : 'label-source').appendChild(child);
+                    }
+                });
+
+                slot.appendChild(draggedEl);
+                if(itemType === 'label') { draggedEl.classList.add('slot-label-display'); }
+                
+                updatePlacementData();
+            });
+        }
+        
+        // ソースエリアに戻す用
+        document.getElementById('source-area').addEventListener('dragover', e => e.preventDefault());
+        document.getElementById('source-area').addEventListener('drop', e => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text/plain');
+            const draggedEl = document.getElementById(id);
+            if(!draggedEl) return;
+            draggedEl.classList.remove('slot-label-display');
+            document.getElementById(draggedEl.dataset.itemtype === 'card' ? 'card-source' : 'label-source').appendChild(draggedEl);
+            updatePlacementData();
+        });
+    }
+
+    function updatePlacementData() {
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            const cardEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'card');
+            const labelEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'label');
+            placedCards[i] = cardEl ? cardEl.dataset.type : null;
+            placedLabels[i] = labelEl ? labelEl.dataset.type : null;
+        }
+    }
+
+    function resetBoard() {
+        placedCards = [null, null, null]; placedLabels = [null, null, null]; selectedChoiceIndex = -1;
+        document.querySelectorAll('.placement-slot').forEach(s => { s.innerHTML = ''; s.classList.remove('selected'); });
+        
+        const cardSource = document.getElementById('card-source');
+        const labelSource = document.getElementById('label-source');
+        if(cardSource && labelSource) {
+            cardSource.innerHTML = `
+                <div class="game-card type-sun" draggable="true" id="c-sun" data-type="sun" data-itemtype="card">愛の花</div>
+                <div class="game-card type-stone" draggable="true" id="c-stone" data-type="stone" data-itemtype="card">死の花</div>
+                <div class="game-card type-seed" draggable="true" id="c-seed" data-type="seed" data-itemtype="card">種</div>`;
+            labelSource.innerHTML = `
+                <div class="label-item type-sun" draggable="true" id="l-sun" data-type="sun" data-itemtype="label">愛</div>
+                <div class="label-item type-stone" draggable="true" id="l-stone" data-type="stone" data-itemtype="label">死</div>
+                <div class="label-item type-seed" draggable="true" id="l-seed" data-type="seed" data-itemtype="label">種</div>`;
+        }
+        setupDragAndDrop();
+        document.getElementById('confirm-btn').style.display = 'block';
+    }
+
+    // --- 視覚的・身体的反応エフェクト ---
+    let myDeadPrev = 0; let myLovePrev = 0;
+    let oppDeadPrev = 0; let oppLovePrev = 0;
+
+    function updateRooms(data) {
+        let myState = (myRoleNum === 1) ? data.p1 : data.p2;
+        let oppState = (myRoleNum === 1) ? data.p2 : data.p1;
+
+        document.getElementById('my-love-cnt').innerText = myState.love;
+        document.getElementById('my-dead-cnt').innerText = myState.dead;
+        document.getElementById('opp-love-cnt').innerText = oppState.love;
+        document.getElementById('opp-dead-cnt').innerText = oppState.dead;
+
+        // 花の描画差分追加
+        drawFlowers('my-flower-container', myState.love, myState.dead, myLovePrev, myDeadPrev);
+        drawFlowers('opp-flower-container', oppState.love, oppState.dead, oppLovePrev, oppDeadPrev);
+
+        myLovePrev = myState.love; myDeadPrev = myState.dead;
+        oppLovePrev = oppState.love; oppDeadPrev = oppState.dead;
+
+        // 身体的反応レイヤーの更新（自分のみ）
+        const reactionLayer = document.getElementById('body-reaction-layer');
+        let poisonLvl = myState.dead;
+        let loveLvl = myState.love;
+        
+        document.documentElement.style.setProperty('--poison-level', poisonLvl);
+        document.documentElement.style.setProperty('--love-level', loveLvl);
+        
+        if(poisonLvl > 0) {
+            document.documentElement.style.setProperty('--poison-shadow', 'rgba(0,0,0,0.85)');
+            reactionLayer.classList.add('shaking');
+        } else {
+            document.documentElement.style.setProperty('--poison-shadow', 'rgba(0,0,0,0)');
+            reactionLayer.classList.remove('shaking');
+        }
+
+        if(loveLvl > 0) {
+            document.documentElement.style.setProperty('--love-shadow', 'rgba(255,105,180,0.4)');
+            reactionLayer.classList.add('pulsing');
+        } else {
+            document.documentElement.style.setProperty('--love-shadow', 'rgba(255,105,180,0)');
+            reactionLayer.classList.remove('pulsing');
+        }
+    }
+
+    function drawFlowers(containerId, totalLove, totalDead, prevLove, prevDead) {
+        const container = document.getElementById(containerId);
+        let addLove = totalLove - prevLove;
+        let addDead = totalDead - prevDead;
+        
+        // 減った場合（愛が枯れた場合）は要素を削除
+        if (addLove < 0) {
+            const loves = container.querySelectorAll('.flower-icon.love');
+            for(let i=0; i<Math.abs(addLove) && i<loves.length; i++) loves[i].remove();
+            addLove = 0;
+        }
+
+        const addIcon = (type, char, count) => {
+            for(let i=0; i<count; i++) {
+                const el = document.createElement('div');
+                el.className = `flower-icon ${type}`;
+                el.innerText = char;
+                // 円形内にランダム配置
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 90 + 10;
+                const x = 120 + Math.cos(angle) * radius - 8;
+                const y = 120 + Math.sin(angle) * radius - 8;
+                el.style.left = `${x}px`; el.style.top = `${y}px`;
+                container.appendChild(el);
+            }
+        };
+        addIcon('love', '🌸', addLove);
+        addIcon('dead', '💀', addDead);
+    }
+
+    // --- その他UIコントロール ---
+    function lockBoard(msg) { document.getElementById('board-lock').style.display = 'flex'; document.getElementById('board-lock').innerText = msg; document.getElementById('confirm-btn').disabled = true; }
+    function unlockBoard() { document.getElementById('board-lock').style.display = 'none'; document.getElementById('confirm-btn').disabled = false; }
+
+    function startTimer(sec) {
+        clearInterval(timerInterval); secondsLeft = sec; updateTimerUI();
+        timerInterval = setInterval(() => {
+            secondsLeft--; updateTimerUI();
+            if(secondsLeft <= 0) {
+                clearInterval(timerInterval);
+                socket.emit('flower_player_timeout', { player: myRoleNum });
+            }
+        }, 1000);
+    }
+    function updateTimerUI() {
+        const m = String(Math.floor(secondsLeft/60)).padStart(2,'0'); const s = String(secondsLeft%60).padStart(2,'0');
+        document.getElementById('timer-display').innerText = `${m}:${s}`;
+    }
+
+    function writeLog(msg) { const logs = document.getElementById('chat-logs'); logs.innerHTML += `
+${msg}`; logs.scrollTop = logs.scrollHeight; }
+    function sendChat() { const inp = document.getElementById('chat-input'); if(!inp.value.trim()) return; socket.emit('send_chat', `${myUsername}: ${inp.value}`); inp.value=''; }
+    socket.on('receive_chat', (msg) => writeLog(msg));
+
+</script>
+</body>
+</html>
