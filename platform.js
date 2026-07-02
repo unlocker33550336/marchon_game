@@ -64,7 +64,8 @@ async function processPlatformRate(username, isWin, resultType) {
 
     if (isWin) {
       let change = 0;
-      if (resultType === 'goal') change = 300;
+      // 🌟【マージ】フラワーゲームの『kill（殺害）』もゴールと同等の+300ptとする
+      if (resultType === 'goal' || resultType === 'kill') change = 300;
       else if (resultType === 'immobilize') change = 150;
       else if (resultType === 'timeout') change = 30; // 【タイムアップ報酬調整】5分放置タイムアップ勝ちは30pt
       else change = 50; 
@@ -107,6 +108,11 @@ app.get('/marathon.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'marathon.html'));
 });
 
+// 🌟【マージ】フラワーゲームのルーティング追加
+app.get('/flower.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'flower.html'));
+});
+
 // ==========================================
 // 3. Socket.io 通信ハブゲート
 // ==========================================
@@ -122,10 +128,7 @@ io.on('connection', (socket) => {
             try {
                 const allUsers = await User.find({}, { password: 0 });
                 socket.emit('admin_init_res', {
-                    success: true,
-                    users: allUsers,
-                    isMatchingLocked: isMatchingLocked,
-                    activeGamesCount: Object.keys(activeGames).length
+                    success: true, users: allUsers, isMatchingLocked: isMatchingLocked, activeGamesCount: Object.keys(activeGames).length
                 });
             } catch (e) {
                 socket.emit('admin_init_res', { success: false, msg: "ユーザーリストの取得に失敗" });
@@ -142,17 +145,12 @@ io.on('connection', (socket) => {
         try {
             const user = await User.findOne({ username: targetUser });
             if (user) {
-                user.rate = parseInt(newRate) || 0;
-                user.rank = getRank(user.rate);
-                await user.save();
+                user.rate = parseInt(newRate) || 0; user.rank = getRank(user.rate); await user.save();
                 console.log(`⚡ [GM ACTION] ${targetUser} のレートを ${newRate}pt に書き換えました。`);
-                
                 const allUsers = await User.find({}, { password: 0 });
                 io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
             }
-        } catch (e) {
-            console.error("レート神改変エラー:", e);
-        }
+        } catch (e) { console.error("レート神改変エラー:", e); }
     });
 
     // 【管理者特権：走者BAN（データ物理削除）】
@@ -162,12 +160,9 @@ io.on('connection', (socket) => {
         try {
             await User.deleteOne({ username: targetUser });
             console.log(`🚨 [GM ACTION] ユーザー [${targetUser}] をプラットフォームから永久追放しました。`);
-            
             const allUsers = await User.find({}, { password: 0 });
             io.to('admin_room').emit('admin_update_list', { users: allUsers, activeGamesCount: Object.keys(activeGames).length });
-        } catch (e) {
-            console.error("BAN執行エラー:", e);
-        }
+        } catch (e) { console.error("BAN執行エラー:", e); }
     });
 
     // 【管理者特権：マッチング緊急ロック切り替え】
@@ -183,19 +178,13 @@ io.on('connection', (socket) => {
         console.log('[SIGNAL RECEIVED] register イベントを受信しました:', data);
         const { username, password } = data;
         
-        if (!username || !password) {
-            return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
-        }
-        if (username.toLowerCase() === 'admin') {
-            return socket.emit('register_res', { success: false, msg: "その識別名はシステム予約済みです" });
-        }
+        if (!username || !password) return socket.emit('register_res', { success: false, msg: "識別名とパスワードを入力してください" });
+        if (username.toLowerCase() === 'admin') return socket.emit('register_res', { success: false, msg: "その識別名はシステム予約済みです" });
         
         try {
             console.log(`-> [DB QUERY] 既存のユーザー [${username}] を検索中...`);
             const exists = await User.findOne({ username });
-            if (exists) {
-                return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
-            }
+            if (exists) return socket.emit('register_res', { success: false, msg: "その識別名は既に使用されています" });
             
             console.log(`-> [DB INSERT] 新しいユーザー [${username}] を書き込み中...`);
             await User.create({ username, password, rate: 100, rank: "NORMAL", win: 0, lose: 0 });
@@ -216,9 +205,7 @@ io.on('connection', (socket) => {
             if (password === 'adminpassword' || token === ADMIN_SECRET) {
                 console.log(`⚡ [ADMIN LOGIN SUCCESS] 管理者権限を識別。裏口トークンを発行します。`);
                 return socket.emit('login_res', { success: true, username: 'admin', isAdmin: true, token: ADMIN_SECRET });
-            } else {
-                return socket.emit('login_res', { success: false, msg: "管理者パスワードが不正です" });
-            }
+            } else return socket.emit('login_res', { success: false, msg: "管理者パスワードが不正です" });
         }
 
         try {
@@ -226,9 +213,7 @@ io.on('connection', (socket) => {
             const user = await User.findOne({ username });
             if (user) {
                 if ((token && user.password === token) || (password && user.password === password)) {
-                    userSocketMap[username] = socket.id;
-                    socketUserMap[socket.id] = username;
-                    
+                    userSocketMap[username] = socket.id; socketUserMap[socket.id] = username;
                     console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
                     
                     // 🔄【自動再入場システム】画面遷移後に部屋(Room)に自動復帰させる
@@ -241,10 +226,7 @@ io.on('connection', (socket) => {
                             break;
                         }
                     }
-
-                    return socket.emit('login_res', { 
-                        success: true, username, rate: user.rate, rank: user.rank, win: user.win, lose: user.lose
-                    });
+                    return socket.emit('login_res', { success: true, username, rate: user.rate, rank: user.rank, win: user.win, lose: user.lose, token: user.password });
                 }
             }
             console.log(`-> [LOGIN FAILED] ユーザー [${username}] の認証に失敗しました`);
@@ -258,8 +240,7 @@ io.on('connection', (socket) => {
     // 【ゲストログイン】
     socket.on('login_guest', () => {
         let guestName = "Guest_" + Math.floor(1000 + Math.random() * 9000);
-        userSocketMap[guestName] = socket.id;
-        socketUserMap[socket.id] = guestName;
+        userSocketMap[guestName] = socket.id; socketUserMap[socket.id] = guestName;
         console.log(`👤 [GUEST ENTER] ゲスト [${guestName}] が入場しました`);
         
         for (let rId in activeGames) {
@@ -270,7 +251,7 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-        socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true });
+        socket.emit('login_res', { success: true, username: guestName, rate: "----", rank: "GUEST", isGuest: true, token: guestName });
     });
 
     // 【マッチングエントリー】
@@ -313,6 +294,131 @@ io.on('connection', (socket) => {
         socket.emit('matchmaking_stopped');
     });
 
+    // 【チャット通信ハブ】
+    socket.on('send_chat', (msg) => {
+        let roomId = null; const username = socketUserMap[socket.id]; if (!username) return;
+        for (let rId in activeGames) { if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; } }
+        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
+    });
+
+
+    // ==========================================
+    // 🪻 FLOWER GAME 専用イベントシステム
+    // ==========================================
+    socket.on('flower_submit_placement', (data) => {
+        const username = socketUserMap[socket.id]; if (!username) return;
+        let roomId = null; for (let rId in activeGames) { if (activeGames[rId].gameId === 'flower' && (activeGames[rId].p1 === username || activeGames[rId].p2 === username)) { roomId = rId; break; } }
+        if (!roomId) return;
+        const game = activeGames[roomId]; const s = game.state;
+        
+        if (s.florist !== data.player) return; // 権限チェック
+        
+        s.currentPlacement = { cards: data.cards, labels: data.labels };
+        // チョイス側へラベル情報のみを送信
+        socket.to(roomId).emit('flower_opponent_placed', { labels: data.labels });
+    });
+
+    socket.on('flower_submit_choice', async (data) => {
+        const username = socketUserMap[socket.id]; if (!username) return;
+        let roomId = null; for (let rId in activeGames) { if (activeGames[rId].gameId === 'flower' && (activeGames[rId].p1 === username || activeGames[rId].p2 === username)) { roomId = rId; break; } }
+        if (!roomId) return;
+        const game = activeGames[roomId]; const s = game.state;
+
+        if (s.choice !== data.player) return; // 権限チェック
+        
+        const idx = data.choiceIndex;
+        const selectedCard = s.currentPlacement.cards[idx];
+        let targetPlayerState = (s.choice === 1) ? s.p1 : s.p2;
+        let pName = (s.choice === 1) ? game.p1 : game.p2;
+
+        let logMsg = ``;
+        // カードの効果適用（環境支配・相殺ルール）
+        if (selectedCard === 'sun') {
+            targetPlayerState.love += 5;
+            logMsg = `★${pName} は [愛の花] を選んだ。（愛の花 +5輪）`;
+        } else if (selectedCard === 'stone') {
+            targetPlayerState.dead += 1;
+            let killedLove = Math.min(2, targetPlayerState.love);
+            targetPlayerState.love -= killedLove;
+            logMsg = `💀${pName} は [死の花] を引いてしまった！（死の花 +1輪 / 愛の花 -${killedLove}輪）`;
+        } else if (selectedCard === 'seed') {
+            if (targetPlayerState.love > targetPlayerState.dead) {
+                targetPlayerState.love += 15;
+                logMsg = `🌱${pName} の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
+            } else {
+                targetPlayerState.dead += 15;
+                logMsg = `☠️${pName} の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
+            }
+        }
+
+        io.to(roomId).emit('flower_phase_result', {
+            selectedIndex: idx, cardType: selectedCard, p1: s.p1, p2: s.p2, log: logMsg
+        });
+
+        // ターンとフェーズの進行処理
+        setTimeout(async () => {
+            if (s.phase === 1) {
+                s.phase = 2; s.florist = 2; s.choice = 1;
+                io.to(roomId).emit('flower_start_phase', { florist: s.florist, choice: s.choice, turn: s.turn, phase: s.phase });
+            } else {
+                // 1ターン完了！スリップダメージと生死判定
+                let d1 = s.p1.dead; let d2 = s.p2.dead;
+                if(d1 > 0) s.p1.life -= Math.pow(1.2, d1);
+                if(d2 > 0) s.p2.life -= Math.pow(1.2, d2);
+
+                let p1DeathCause = null; let p2DeathCause = null;
+                if (s.p1.love >= 100) p1DeathCause = "窒息中毒死"; else if (s.p1.life <= 0) p1DeathCause = "猛毒ショック死";
+                if (s.p2.love >= 100) p2DeathCause = "窒息中毒死"; else if (s.p2.life <= 0) p2DeathCause = "猛毒ショック死";
+
+                let turnLog = `【第 ${s.turn} ターン終了】\n`;
+                if(d1 > 0) turnLog += `・${game.p1} は毒に蝕まれている。(残命: ${Math.max(0, s.p1.life).toFixed(1)}%)\n`;
+                if(d2 > 0) turnLog += `・${game.p2} は毒に蝕まれている。(残命: ${Math.max(0, s.p2.life).toFixed(1)}%)\n`;
+
+                io.to(roomId).emit('flower_turn_end_result', { p1: s.p1, p2: s.p2, log: turnLog });
+
+                let isGameOver = false; let winner = 'DRAW'; let reason = 'kill';
+
+                if (p1DeathCause || p2DeathCause) {
+                    isGameOver = true;
+                    if (p1DeathCause && p2DeathCause) winner = 'DRAW';
+                    else if (p1DeathCause) winner = game.p2;
+                    else winner = game.p1;
+                } else if (s.turn >= 10) {
+                    isGameOver = true; reason = 'goal';
+                    if (s.p1.love > s.p2.love) winner = game.p1;
+                    else if (s.p2.love > s.p1.love) winner = game.p2;
+                }
+
+                if (isGameOver) {
+                    let r1 = await processPlatformRate(game.p1, winner===game.p1, reason);
+                    let r2 = await processPlatformRate(game.p2, winner===game.p2, reason);
+                    if(userSocketMap[game.p1]) io.to(userSocketMap[game.p1]).emit('platform_game_over', { winner, rateChange: (winner===game.p1)?r1.rateChange:r2.rateChange, newRate: r1.currentRate, newRank: r1.currentRank });
+                    if(userSocketMap[game.p2]) io.to(userSocketMap[game.p2]).emit('platform_game_over', { winner, rateChange: (winner===game.p2)?r2.rateChange:r1.rateChange, newRate: r2.currentRate, newRank: r2.currentRank });
+                    delete activeGames[roomId];
+                } else {
+                    s.turn++; s.phase = 1; s.florist = 1; s.choice = 2;
+                    io.to(roomId).emit('flower_start_phase', { florist: s.florist, choice: s.choice, turn: s.turn, phase: s.phase });
+                }
+            }
+        }, 2000);
+    });
+
+    socket.on('flower_player_timeout', async (data) => {
+        const username = socketUserMap[socket.id]; let roomId = null;
+        for (let rId in activeGames) { if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; } }
+        if (!roomId) return; const game = activeGames[roomId];
+        let opponent = (data.player === 1) ? game.p2 : game.p1; let loserName = (data.player === 1) ? game.p1 : game.p2;
+        let oppResult = await processPlatformRate(opponent, true, 'timeout'); let loserResult = await processPlatformRate(loserName, false, 'timeout');
+        if (userSocketMap[game.p1]) io.to(userSocketMap[game.p1]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p1) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p1 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p1 === opponent) ? oppResult.currentRank : loserResult.currentRank });
+        if (userSocketMap[game.p2]) io.to(userSocketMap[game.p2]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p2) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p2 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p2 === opponent) ? oppResult.currentRank : loserResult.currentRank });
+        delete activeGames[roomId];
+    });
+
+
+    // ==========================================
+    // 🏃 THE MARATHON 専用イベントシステム（完全復元）
+    // ==========================================
+    
     // 【イベント発動予約】
     socket.on('reserve_event', (data) => {
         const username = socketUserMap[socket.id];
@@ -542,13 +648,6 @@ io.on('connection', (socket) => {
         delete activeGames[roomId];
     });
 
-    // 【チャット通信ハブ】
-    socket.on('send_chat', (msg) => {
-        let roomId = null; const username = socketUserMap[socket.id]; if (!username) return;
-        for (let rId in activeGames) { if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; } }
-        if (roomId) { io.to(roomId).emit('receive_chat', msg); }
-    });
-
     // 🌟【タイムアップ専用窓口】5分時間切れ時、勝者に正確に 30ポイントだけを配給する専用インフラ処理
     socket.on('player_timeout', async (data) => {
         const username = socketUserMap[socket.id];
@@ -583,7 +682,10 @@ io.on('connection', (socket) => {
         delete activeGames[roomId];
     });
 
-    // 【回線切断ゲート：試合中走者のみに5分猶予を与え、ロビー連打は安全にスルー】
+
+    // ==========================================
+    // 🌐 共通切断処理ゲート
+    // ==========================================
     socket.on('disconnect', () => {
         const username = socketUserMap[socket.id];
         console.log(`[SOCKET DISCONNECTED] 回線が切断されました: ${username || "未ログインの接続"}`);
@@ -636,15 +738,27 @@ setInterval(async () => {
         p1.socket.join(roomId);
         p2.socket.join(roomId);
 
-        activeGames[roomId] = { 
-            gameId: gameId, p1: p1.username, p2: p2.username, isProcessingResult: false, 
-            state: {
-                turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
-                p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
-                p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
-                p1Choice: null, p2Choice: null
-            } 
-        };
+        // ゲーム種別に応じた初期ステートの注入
+        if (gameId === 'flower') {
+            activeGames[roomId] = { 
+                gameId: 'flower', p1: p1.username, p2: p2.username, isProcessingResult: false,
+                state: {
+                    turn: 1, phase: 1, florist: 1, choice: 2,
+                    p1: { love: 0, dead: 0, life: 100 }, p2: { love: 0, dead: 0, life: 100 },
+                    currentPlacement: { cards: [], labels: [] }
+                } 
+            };
+        } else if (gameId === 'marathon') {
+            activeGames[roomId] = { 
+                gameId: 'marathon', p1: p1.username, p2: p2.username, isProcessingResult: false, 
+                state: {
+                    turn: 1, lastEventP1: -99, lastEventP2: -99, p1Reserved: false, p2Reserved: false,
+                    p1: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
+                    p2: { progress: 0, temp: 5, stoneCount: 0, cheerCount: 0, wastePile: {sun:0,stone:0,water:0,cheer:0}, debt: 0, consecutiveNoProgress: 0 },
+                    p1Choice: null, p2Choice: null
+                } 
+            };
+        }
 
         p1.socket.emit('assigned_player', 1);
         p2.socket.emit('assigned_player', 2);
@@ -654,6 +768,13 @@ setInterval(async () => {
             p1: { username: p1.username, rate: p1.rate, rank: p1.rank },
             p2: { username: p2.username, rate: p2.rate, rank: p2.rank }
         });
+
+        // FLOWER GAME の場合は少し遅延させて第1フェーズ開始シグナルを送信
+        if (gameId === 'flower') {
+            setTimeout(() => {
+                io.to(roomId).emit('flower_start_phase', { florist: 1, choice: 2, turn: 1, phase: 1 });
+            }, 1000);
+        }
     }
 }, 1000);
 
