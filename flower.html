@@ -41,6 +41,24 @@
         #body-reaction-layer.shaking { animation: poison-shake 0.2s infinite; }
         #body-reaction-layer.pulsing::before { content: ''; position: absolute; top:0; left:0; right:0; bottom:0; animation: love-pulse 2s infinite ease-in-out; }
 
+        /* 🎉 勝利演出用エフェクトレイヤー */
+        #victory-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10000; display: none;
+            justify-content: center; align-items: center; flex-direction: column;
+            background: rgba(0,0,0,0.85); overflow: hidden;
+        }
+        .victory-text {
+            font-size: 80px; font-weight: bold; text-shadow: 0 0 30px rgba(255,255,255,0.8);
+            animation: zoomIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            z-index: 10001; text-align: center; line-height: 1.1;
+        }
+        .victory-subtext { font-size: 24px; color: #fff; margin-top: 20px; animation: fadeIn 1.5s forwards; }
+        @keyframes zoomIn { 0% { transform: scale(0) rotate(-10deg); opacity: 0; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        .particle { position: absolute; font-size: 40px; animation: fall linear forwards; z-index: 10000; }
+        @keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
+
         .container { max-width: 900px; margin: 0 auto; padding: 5px; position: relative; z-index: 10; }
         
         .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -119,6 +137,9 @@
 
 <div id="body-reaction-layer"></div>
 
+<!-- 勝利時ド派手演出レイヤー -->
+<div id="victory-screen"></div>
+
 <div class="container">
     <div class="nav-bar">
         <button class="back-btn" onclick="location.href='/'">↩ ロビーへ帰還</button>
@@ -135,8 +156,8 @@
 
     <div id="game-start-btn-panel" class="lobby-panel">
         <h3 style="color: #9b5de5; margin-top: 0;">🪻 フラワーゲームへようこそ</h3>
-        <p style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.5;">
-          このゲームは花を送り合うゲームです。<br>
+        <p style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.5; text-align: left;">
+            このゲームは花を送り合うゲームです。<br>
             あなた達2人はチョイス側とフローリスト側を交代しながら、相手に花を送り合ってもらいます。<br>
             両者がチョイス側とフローリスト側を行うと1ターンが経過します。ゲームは全部で10ターン行われます。<br>
             送られた花や種は自分のいる部屋に送られていきます。では、それぞれのゲーム内での役割を紹介します。<br><br>
@@ -152,18 +173,26 @@
             選択を確定すると、選択したカードの効果が発動されます。<br><br>
 
             <b>カードについて</b><br>
-            ・<b>死の花</b>: 植えるとすぐに枯れてしまいますが、枯れた後に花から毒が放出されます。<br>
-            毒は猛毒ですが、死の花1輪には少量しか入っていません。毒によって愛の花を枯らせることができます。<br>
-            カードを1枚選ぶごとに1輪の花が植えられます。<br>
-            ・<b>愛の花</b>: 相手に愛情を分け与える花で、たくさん集めることによって様々ないいことが起こります。<br>
-            カードを1枚選ぶごとに5輪の花が植えられます。<br>
-            ・<b>種</b>: 種は何の花の種かはわかりませんが、環境次第で死の花か愛の花が咲きます。<br>
-            カードを1枚選ぶごとに15粒の種が植えられます。<br><br>
-            
-            <b>勝利条件と反則行為</b><br>
-            ・勝利条件: 相手の死亡、または相手より多くの花を集めること。<br>
-            ・反則行為: 配置や選択をする際の5分以上の遅延。
 
+            <b>死の花</b><br>
+            死の花は植えるとすぐに枯れてしまいますが、枯れた後に花から毒が放出されます。<br>
+            毒は猛毒ですが、死の花1輪には少量しか入っていません。毒によって愛の花を枯らせることができます。<br>
+            カードを1枚選ぶごとに1輪の花が植えられます。<br><br>
+
+            <b>愛の花</b><br>
+            愛の花は相手に愛情を分け与える花で、たくさん集めることによって様々ないいことが起こります。<br>
+            カードを1枚選ぶごとに5輪の花が植えられます。<br><br>
+
+            <b>種</b><br>
+            種は何の花の種かはわかりませんが、環境次第で死の花か愛の花が咲きます。<br>
+            カードを1枚選ぶごとに15粒の種が植えられます。<br><br>
+    
+            <b>勝利条件と反則行為</b><br>
+            
+            <b>勝利条件</b><br>
+            相手の死亡、または相手より多くの花を集めること。<br>
+            <b>反則行為</b><br>
+            配置や選択をする際の5分以上の遅延。<br>
 
         </p>
         <button class="action-btn" onclick="startMatch()">公式レート対戦に参加する</button>
@@ -290,6 +319,48 @@
 
     socket.on('login_res', (res) => { if(!res.success) location.href = '/'; });
 
+    // 🌟【新規追加：ド派手な勝利エフェクト】
+    function showVictoryEffect(winnerName, cause) {
+        const screen = document.getElementById('victory-screen');
+        screen.style.display = 'flex';
+        
+        let emoji = '🌸';
+        let color = '#ff6b81';
+        let titleText = 'VICTORY';
+        let subText = 'あなたは生き残った';
+
+        // 勝利か敗北か判定
+        if (winnerName === myUsername || winnerName === 'あなた') {
+            if (cause.includes('窒息')) {
+                emoji = '🌸'; color = '#ff9ff3'; titleText = 'LOVE OVERDOSE!'; subText = '圧倒的な愛による窒息勝利';
+            } else if (cause.includes('猛毒') || cause === 'kill') {
+                emoji = '💀'; color = '#9b5de5'; titleText = 'TOXIC FATAL!'; subText = '猛毒による完全なる毒殺';
+            } else {
+                emoji = '🪻'; color = '#feca57'; titleText = 'PERFECT WIN!'; subText = '10ターンの激闘を制した';
+            }
+        } else if (winnerName === 'DRAW') {
+            emoji = '💥'; color = '#c8d6e5'; titleText = 'DRAW...'; subText = '両者共倒れ...';
+        } else {
+            emoji = '🥀'; color = '#57606f'; titleText = 'YOU DIED...'; subText = 'あなたは敗北し、息絶えた';
+        }
+
+        screen.innerHTML = `
+            <div class="victory-text" style="color:${color}">${titleText}</div>
+            <div class="victory-subtext">${subText}</div>
+        `;
+
+        // 大量のパーティクルを降らせる
+        for(let i=0; i<150; i++) {
+            let p = document.createElement('div');
+            p.className = 'particle';
+            p.innerText = Math.random() > 0.1 ? emoji : (emoji === '🌸' ? '🌺' : '☠️');
+            p.style.left = Math.random() * 100 + 'vw';
+            p.style.animationDuration = (Math.random() * 2 + 1.5) + 's';
+            p.style.animationDelay = Math.random() * 0.5 + 's';
+            screen.appendChild(p);
+        }
+    }
+
     // マッチング系
     let matchTimer = null; let mSec = 0;
     function startMatch() {
@@ -379,12 +450,16 @@
     socket.on('platform_game_over', (result) => {
         clearInterval(timerInterval);
         lockBoard("決着！");
+        
+        // 🌟 勝利エフェクト発動
+        showVictoryEffect(result.winner, result.reason || 'goal');
+
         setTimeout(() => {
             let msg = (result.winner === myUsername) ? `【大勝利】共通レート変動: +${result.rateChange} pt` : `【敗北】共通レート変動: -${result.rateChange} pt`;
             if (result.winner === 'DRAW') msg = "【引き分け】";
             alert(`${msg}\n最新レート: ${result.newRate} pt (${result.newRank})`);
             location.href = '/';
-        }, 3000);
+        }, 5000); // 5秒間エフェクトを堪能してからアラート
     });
 
     // 🌟【核心】アクション確定ボタンの分岐（オンライン or AI練習）
@@ -790,8 +865,14 @@
 
             if (isGameOver) {
                 lockBoard("決着！");
-                alert(`【AI戦 最終リザルト】\n勝者: ${localWinner}\nあなたの愛の花: ${localAIState.p1.love}輪 / 毒残骸: ${localAIState.p1.dead}輪\nAIの愛の花: ${localAIState.p2.love}輪 / 毒残骸: ${localAIState.p2.dead}輪`);
-                location.href = '/';
+                
+                // 🌟 勝利エフェクト発動
+                showVictoryEffect(localWinner, p1DeathCause || p2DeathCause || 'goal');
+
+                setTimeout(() => {
+                    alert(`【AI戦 最終リザルト】\n勝者: ${localWinner}\nあなたの愛の花: ${localAIState.p1.love}輪 / 毒残骸: ${localAIState.p1.dead}輪\nAIの愛の花: ${localAIState.p2.love}輪 / 毒残骸: ${localAIState.p2.dead}輪`);
+                    location.href = '/';
+                }, 5000); // 5秒後にアラートと画面遷移
             } else {
                 // 次のターンへ
                 localAIState.turn++;
