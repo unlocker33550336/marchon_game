@@ -215,6 +215,13 @@ io.on('connection', (socket) => {
                 if ((token && user.password === token) || (password && user.password === password)) {
                     userSocketMap[username] = socket.id; socketUserMap[socket.id] = username;
                     console.log(`✅ [LOGIN SUCCESS] ユーザー [${username}] の認証に成功しました`);
+
+                    // 🌟【追加】リロード等で復帰した場合、時限爆弾（ペナルティタイマー）を解除する
+                    if (reconnectTimers[username]) {
+                        clearTimeout(reconnectTimers[username]);
+                        delete reconnectTimers[username];
+                        console.log(`✅ [RECONNECT SUCCESS] 走者 [${username}] が復帰しました。ペナルティタイマーを解除します。`);
+                    }
                     
                     // 🔄【自動再入場システム】画面遷移後に部屋(Room)に自動復帰させる
                     for (let rId in activeGames) {
@@ -222,6 +229,15 @@ io.on('connection', (socket) => {
                             socket.join(rId);
                             let myRole = (activeGames[rId].p1 === username) ? 1 : 2;
                             socket.emit('assigned_player', myRole);
+
+                            // 🌟【追加】ゲーム状態の完全復元パケット（リロード対策）
+                            socket.emit('game_restore_state', {
+                                gameId: activeGames[rId].gameId,
+                                roomId: rId,
+                                p1: activeGames[rId].p1,
+                                p2: activeGames[rId].p2,
+                                state: activeGames[rId].state
+                            });
                             console.log(`🔄 [ROOM REJOIN] 試合中の走者 [${username}] が新しい回線で部屋 [${rId}] に自動復帰しました。`);
                             break;
                         }
@@ -248,6 +264,15 @@ io.on('connection', (socket) => {
                 socket.join(rId);
                 let myRole = (activeGames[rId].p1 === guestName) ? 1 : 2;
                 socket.emit('assigned_player', myRole);
+
+                // 🌟【追加】ゲスト用にも復帰データを送る
+                socket.emit('game_restore_state', {
+                    gameId: activeGames[rId].gameId,
+                    roomId: rId,
+                    p1: activeGames[rId].p1,
+                    p2: activeGames[rId].p2,
+                    state: activeGames[rId].state
+                });
                 break;
             }
         }
@@ -407,10 +432,14 @@ io.on('connection', (socket) => {
         const username = socketUserMap[socket.id]; let roomId = null;
         for (let rId in activeGames) { if (activeGames[rId].p1 === username || activeGames[rId].p2 === username) { roomId = rId; break; } }
         if (!roomId) return; const game = activeGames[roomId];
-        let opponent = (data.player === 1) ? game.p2 : game.p1; let loserName = (data.player === 1) ? game.p1 : game.p2;
+        
+        // 🌟【修正】どちらから申告が来ても「今行動すべきだったプレイヤー」を正確に判定して敗北させる
+        let activePlayerNum = (game.state.phase === 1) ? game.state.florist : game.state.choice;
+        let opponent = (activePlayerNum === 1) ? game.p2 : game.p1; let loserName = (activePlayerNum === 1) ? game.p1 : game.p2;
+        
         let oppResult = await processPlatformRate(opponent, true, 'timeout'); let loserResult = await processPlatformRate(loserName, false, 'timeout');
-        if (userSocketMap[game.p1]) io.to(userSocketMap[game.p1]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p1) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p1 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p1 === opponent) ? oppResult.currentRank : loserResult.currentRank });
-        if (userSocketMap[game.p2]) io.to(userSocketMap[game.p2]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p2) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p2 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p2 === opponent) ? oppResult.currentRank : loserResult.currentRank });
+        if (userSocketMap[game.p1]) io.to(userSocketMap[game.p1]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p1) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p1 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p1 === opponent) ? oppResult.currentRank : loserResult.currentRank, reason: 'timeout' });
+        if (userSocketMap[game.p2]) io.to(userSocketMap[game.p2]).emit('platform_game_over', { winner: opponent, rateChange: (opponent === game.p2) ? oppResult.rateChange : loserResult.rateChange, newRate: (game.p2 === opponent) ? oppResult.currentRate : loserResult.currentRate, newRank: (game.p2 === opponent) ? oppResult.currentRank : loserResult.currentRank, reason: 'timeout' });
         delete activeGames[roomId];
     });
 
