@@ -396,8 +396,7 @@ io.on('connection', (socket) => {
                 if (s.p2.love >= 100) p2DeathCause = "窒息中毒死"; else if (s.p2.life <= 0) p2DeathCause = "猛毒ショック死";
 
                 let turnLog = `【第 ${s.turn} ターン終了】\n`;
-                if(d1 > 0) turnLog += `・${game.p1} は毒に蝕まれている。(残命: ${Math.max(0, s.p1.life).toFixed(1)}%)\n`;
-                if(d2 > 0) turnLog += `・${game.p2} は毒に蝕まれている。(残命: ${Math.max(0, s.p2.life).toFixed(1)}%)\n`;
+               
 
                 io.to(roomId).emit('flower_turn_end_result', { p1: s.p1, p2: s.p2, log: turnLog });
 
