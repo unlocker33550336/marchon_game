@@ -12,7 +12,7 @@
             --love-shadow: rgba(255, 105, 180, 0);
         }
 
-       body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #0d0d12; color: #e0e0e0; padding: 10px; margin: 0; user-select: none; overflow-y: auto; overflow-x: hidden; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #0d0d12; color: #e0e0e0; padding: 10px; margin: 0; user-select: none; overflow-y: auto; overflow-x: hidden; }
         
         /* ☠️ 毒と愛の身体反応エフェクトレイヤー */
         #body-reaction-layer {
@@ -22,7 +22,6 @@
             transition: box-shadow 1s ease-in-out;
         }
 
-        /* 毒のパニック揺れエフェクト */
         @keyframes poison-shake {
             0% { transform: translate(0, 0) rotate(0deg); }
             25% { transform: translate(calc(var(--poison-level) * 0.5px), calc(var(--poison-level) * 0.5px)) rotate(calc(var(--poison-level) * 0.1deg)); }
@@ -31,7 +30,6 @@
             100% { transform: translate(0, 0) rotate(0deg); }
         }
 
-        /* 愛の酩酊（ピンク明滅）エフェクト */
         @keyframes love-pulse {
             0% { opacity: 0.1; }
             50% { opacity: calc(0.1 + var(--love-level) * 0.005); background: rgba(255, 105, 180, 0.2); }
@@ -58,6 +56,16 @@
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .particle { position: absolute; font-size: 40px; animation: fall linear forwards; z-index: 10000; }
         @keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
+
+        /* 📱 スマホ縦持ち時の警告オーバーレイ */
+        #landscape-warning {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: #0d0d12; z-index: 100000;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            color: #fff; text-align: center; font-weight: bold; line-height: 1.5;
+        }
+        #landscape-warning .icon { font-size: 60px; margin-bottom: 20px; animation: rotatePhone 1.5s infinite ease-in-out; }
+        @keyframes rotatePhone { 0% { transform: rotate(0deg); } 50% { transform: rotate(-90deg); } 100% { transform: rotate(-90deg); } }
 
         .container { max-width: 900px; margin: 0 auto; padding: 5px; position: relative; z-index: 10; }
         
@@ -128,17 +136,59 @@
         .chat-input-wrapper { display: flex; gap: 5px; }
         .chat-input-wrapper input { flex: 1; padding: 8px; background: #26262b; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px; }
         
-        .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 50; display: none; border-radius: 12px; justify-content: center; align-items: center; font-weight: bold; font-size: 18px; color: #fff; }
+        .lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 50; display: none; border-radius: 12px; justify-content: center; align-items: center; font-weight: bold; font-size: 18px; color: #fff; }
         .hidden { display: none !important; }
+
+        /* 📱 スマホ レスポンシブ最適化 (メディアクエリ) */
+        @media screen and (max-width: 768px) and (orientation: portrait) {
+            #landscape-warning { display: flex; }
+            .container { display: none; }
+        }
+
+        @media screen and (max-height: 600px) and (orientation: landscape) {
+            .container { padding: 2px; }
+            h1 { font-size: 14px; }
+            .nav-bar { margin-bottom: 5px; }
+            .back-btn { padding: 3px 8px; font-size: 10px; }
+            
+            .battle-arena { grid-template-columns: 140px 1fr 140px; gap: 5px; margin-bottom: 5px; }
+            .player-room { width: 130px; height: 130px; }
+            .player-figure { font-size: 20px; }
+            .flower-icon { font-size: 12px; }
+            
+            .center-board { padding: 5px; }
+            .placement-row { gap: 5px; margin-bottom: 10px; }
+            .placement-slot { width: 50px; height: 75px; }
+            .slot-label-display { top: -10px; font-size: 9px; padding: 1px 4px; }
+            
+            .source-area { padding: 5px; margin-bottom: 5px; }
+            .source-row { gap: 5px; margin-bottom: 5px; }
+            .game-card { width: 45px; height: 60px; font-size: 10px; }
+            .label-item { width: 40px; height: 20px; font-size: 9px; }
+            
+            .turn-display { font-size: 14px; }
+            .role-title { font-size: 12px; margin-bottom: 10px; }
+            .action-btn { padding: 8px; font-size: 12px; }
+            
+            .room-stats { font-size: 10px; margin-top: 5px; }
+            .room-stats .name { font-size: 12px; margin-bottom: 2px; }
+        }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
+<!-- 身体反応レイヤー -->
 <div id="body-reaction-layer"></div>
 
 <!-- 勝利時ド派手演出レイヤー -->
 <div id="victory-screen"></div>
+
+<!-- スマホ縦持ち警告レイヤー -->
+<div id="landscape-warning">
+    <div class="icon">📱</div>
+    <div>画面を横向き（ランドスケープ）<br>にしてプレイしてください</div>
+</div>
 
 <div class="container">
     <div class="nav-bar">
@@ -154,70 +204,50 @@
         <button class="action-btn" onclick="cancelMatch()" style="background: #444; margin-top: 10px; width: 50%;">キャンセル</button>
     </div>
 
+    <!-- ルール ＆ スタート画面 -->
     <div id="game-start-btn-panel" class="lobby-panel">
         <h3 style="color: #9b5de5; margin-top: 0;">🪻 フラワーゲームへようこそ</h3>
-        <p style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.5; text-align: center;">
-          このゲームは花を送り合うゲームです。<br>
-
+        <div style="font-size: 12px; color: #aaa; margin-bottom: 20px; line-height: 1.6; text-align: left;">
+            このゲームは花を送り合うゲームです。<br>
             あなた達2人はチョイス側とフローリスト側を交代しながら、相手に花を送り合ってもらいます。<br>
-
             両者がチョイス側とフローリスト側を行うと1ターンが経過します。ゲームは全部で10ターン行われます。<br>
-
             送られた花や種は自分のいる部屋に送られていきます。では、それぞれのゲーム内での役割を紹介します。<br><br>
 
-
-
-            <b>フローリスト側</b><br>
-
+            <b style="color:#fff;">フローリスト側</b><br>
             死の花、愛の花、種の3種類のカードを盤面に配置します。<br>
-
             その後に、その3種類のカードに名前をラベリングします。<br>
-
             この名前は必ずしも本当の名前と同じにする必要はありません。<br><br>
 
-
-
-            <b>チョイス側</b><br>
-
+            <b style="color:#fff;">チョイス側</b><br>
             フローリスト側が配置した盤面からカードを選びます。<br>
-
             その際にチョイス側はフローリスト側がラベリングした名前が常に表示されます。<br>
-
             選択を確定すると、選択したカードの効果が発動されます。<br><br>
 
-
-
-            <b>カードについて</b><br>
-
-            ・<b>死の花</b>: 植えるとすぐに枯れてしまいますが、枯れた後に花から毒が放出されます。<br>
-
+            <b style="color:#fff;">カードについて</b><br><br>
+            <b style="color:#ff5252;">死の花</b><br>
+            死の花は植えるとすぐに枯れてしまいますが、枯れた後に花から毒が放出されます。<br>
             毒は猛毒ですが、死の花1輪には少量しか入っていません。毒によって愛の花を枯らせることができます。<br>
+            カードを1枚選ぶごとに1輪の花が植えられます。<br><br>
 
-            カードを1枚選ぶごとに1輪の花が植えられます。<br>
+            <b style="color:#ff9f43;">愛の花</b><br>
+            愛の花は相手に愛情を分け与える花で、たくさん集めることによって様々ないいことが起こります。<br>
+            カードを1枚選ぶごとに5輪の花が植えられます。<br><br>
 
-            ・<b>愛の花</b>: 相手に愛情を分け与える花で、たくさん集めることによって様々ないいことが起こります。<br>
-
-            カードを1枚選ぶごとに5輪の花が植えられます。<br>
-
-            ・<b>種</b>: 種は何の花の種かはわかりませんが、環境次第で死の花か愛の花が咲きます。<br>
-
+            <b style="color:#1dd1a1;">種</b><br>
+            種は何の花の種かはわかりませんが、環境次第で死の花か愛の花が咲きます。<br>
             カードを1枚選ぶごとに15粒の種が植えられます。<br><br>
-
             
-
-            <b>勝利条件と反則行為</b><br>
-
-            ・勝利条件: 相手の死亡、または相手より多くの花を集めること。<br>
-
-            ・反則行為: 配置や選択をする際の5分以上の遅延。
-            
-        </p>
+            <b style="color:#fff;">勝利条件と反則行為</b><br><br>
+            <b>勝利条件</b><br>
+            相手の死亡、または相手より多くの愛の花を集めること。<br>
+            <b>反則行為</b><br>
+            配置や選択をする際の5分以上の遅延。<br>
+        </div>
         <button class="action-btn" onclick="startMatch()">公式レート対戦に参加する</button>
-        <!-- 🌟【追加】思考AI戦練習モード起動トリガー -->
         <button class="action-btn" onclick="startAIModeTrigger()" style="background: #10ac84; margin-top: 10px;">思考AI戦（練習モード）</button>
     </div>
 
-    <!-- 对战アリーナ -->
+    <!-- 対戦アリーナ -->
     <div class="battle-arena" id="battle-arena">
         
         <!-- P1 (自分) 部屋 -->
@@ -234,7 +264,7 @@
         </div>
 
         <!-- 中央盤面 -->
-        <div class="center-board">
+        <div class="center-board" id="game-container">
             <div class="lock-overlay" id="board-lock">相手の行動を待機中...</div>
             <div class="board-header">
                 <div>TURN: <span class="turn-display" id="turn-display">1 / 10</span></div>
@@ -286,7 +316,7 @@
             </div>
             <div class="room-stats">
                 <div class="name" id="opp-name">ENEMY <span id="opp-rate" style="color:#aaa; font-weight:normal; font-size:10px;"></span></div>
-                <div>🌸 愛の花: <span class="love-cnt" id="opp-love-cnt">0</span> 輪</div>
+                <div>🌸 愛の花: <span class="love-cnt" id="opp-love-cnt">0</span> / 100 輪</div>
                 <div>💀 死の花: <span class="dead-cnt" id="opp-dead-cnt">0</span> 輪</div>
             </div>
         </div>
@@ -310,7 +340,7 @@
     let timerInterval = null;
     let secondsLeft = 300;
     
-    // 🌟【AI戦用フラグ ＆ 完全ローカル用状態定義】
+    // AI戦用フラグ＆ローカル状態
     let isAIMode = false;
     let localAIState = {
         turn: 1, phase: 1, florist: 1, choice: 2,
@@ -319,7 +349,6 @@
         currentPlacement: { cards: [], labels: [] }
     };
 
-    // 配置データ
     let placedCards = [null, null, null];
     let placedLabels = [null, null, null];
     let selectedChoiceIndex = -1;
@@ -336,7 +365,51 @@
 
     socket.on('login_res', (res) => { if(!res.success) location.href = '/'; });
 
-    // 🌟【新規追加：ド派手な勝利エフェクト】
+    // 【イベント委譲方式】による強力なドラッグ＆ドロップ実装
+    const gameContainer = document.getElementById('game-container');
+    gameContainer.addEventListener('dragstart', (e) => {
+        if (e.target.dataset.itemtype) {
+            e.dataTransfer.setData('text/plain', e.target.id);
+            e.dataTransfer.setData('type', e.target.dataset.itemtype);
+        }
+    });
+
+    document.querySelectorAll('.placement-slot, #card-source, #label-source').forEach(zone => {
+        zone.addEventListener('dragover', e => e.preventDefault());
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text/plain');
+            const itemType = e.dataTransfer.getData('type');
+            const draggedEl = document.getElementById(id);
+            if (!draggedEl) return;
+
+            if (zone.classList.contains('placement-slot')) {
+                Array.from(zone.children).forEach(c => {
+                    if (c.dataset.itemtype === itemType) {
+                        document.getElementById(itemType === 'card' ? 'card-source' : 'label-source').appendChild(c);
+                    }
+                });
+                zone.appendChild(draggedEl);
+                if (itemType === 'label') draggedEl.classList.add('slot-label-display');
+            } else {
+                draggedEl.classList.remove('slot-label-display');
+                zone.appendChild(draggedEl);
+            }
+            updatePlacementData();
+        });
+    });
+
+    function updatePlacementData() {
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            const cardEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'card');
+            const labelEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'label');
+            placedCards[i] = cardEl ? cardEl.dataset.type : null;
+            placedLabels[i] = labelEl ? labelEl.dataset.type : null;
+        }
+    }
+
+    // 🌟 勝利エフェクト
     function showVictoryEffect(winnerName, cause) {
         const screen = document.getElementById('victory-screen');
         screen.style.display = 'flex';
@@ -346,14 +419,13 @@
         let titleText = 'VICTORY';
         let subText = 'あなたは生き残った';
 
-        // 勝利か敗北か判定
         if (winnerName === myUsername || winnerName === 'あなた') {
             if (cause.includes('窒息')) {
                 emoji = '🌸'; color = '#ff9ff3'; titleText = 'LOVE OVERDOSE!'; subText = '圧倒的な愛による窒息勝利';
             } else if (cause.includes('猛毒') || cause === 'kill') {
                 emoji = '💀'; color = '#9b5de5'; titleText = 'TOXIC FATAL!'; subText = '猛毒による完全なる毒殺';
             } else {
-                emoji = '🪻'; color = '#feca57'; titleText = 'PERFECT WIN!'; subText = '10ターンの激闘を制した';
+                emoji = '🪻'; color = '#feca57'; titleText = 'PERFECT WIN!'; subText = '激闘を制した';
             }
         } else if (winnerName === 'DRAW') {
             emoji = '💥'; color = '#c8d6e5'; titleText = 'DRAW...'; subText = '両者共倒れ...';
@@ -366,7 +438,6 @@
             <div class="victory-subtext">${subText}</div>
         `;
 
-        // 大量のパーティクルを降らせる
         for(let i=0; i<150; i++) {
             let p = document.createElement('div');
             p.className = 'particle';
@@ -378,7 +449,6 @@
         }
     }
 
-    // マッチング系
     let matchTimer = null; let mSec = 0;
     function startMatch() {
         document.getElementById('game-start-btn-panel').classList.add('hidden');
@@ -386,6 +456,7 @@
         socket.emit('join_matchmaking', { gameId: 'flower' });
         mSec = 0; matchTimer = setInterval(() => { mSec++; document.getElementById('matching-timer').innerText = `経過時間: ${mSec}秒`; }, 1000);
     }
+    
     function cancelMatch() {
         socket.emit('leave_matchmaking');
         clearInterval(matchTimer);
@@ -407,7 +478,6 @@
 
     socket.on('assigned_player', (num) => { myRoleNum = num; });
 
-    // ゲーム進行系（オンライン）
     socket.on('flower_start_phase', (data) => {
         document.getElementById('turn-display').innerText = `${data.turn} / 10`;
         currentPhaseRole = (data.florist === myRoleNum) ? 'florist' : 'choice';
@@ -422,7 +492,6 @@
             document.getElementById('source-area').style.display = 'block';
             document.getElementById('choice-btn-row').style.display = 'none';
             document.getElementById('rotation-wrapper').classList.remove('rotate-to-choice');
-            setupDragAndDrop();
         } else {
             document.getElementById('role-title').innerText = "【チョイス】相手の配置を待機中...";
             document.getElementById('role-title').style.color = "#3b82f6";
@@ -468,7 +537,6 @@
         clearInterval(timerInterval);
         lockBoard("決着！");
         
-        // 🌟 勝利エフェクト発動
         showVictoryEffect(result.winner, result.reason || 'goal');
 
         setTimeout(() => {
@@ -476,10 +544,9 @@
             if (result.winner === 'DRAW') msg = "【引き分け】";
             alert(`${msg}\n最新レート: ${result.newRate} pt (${result.newRank})`);
             location.href = '/';
-        }, 5000); // 5秒間エフェクトを堪能してからアラート
+        }, 5000); 
     });
 
-    // 🌟【核心】アクション確定ボタンの分岐（オンライン or AI練習）
     function submitAction() {
         if (isAIMode) {
             submitActionLocal();
@@ -506,61 +573,6 @@
         document.getElementById('confirm-btn').style.display = 'block';
     }
 
-    // --- ドラッグ＆ドロップ実装 (フローリスト用) ---
-    function setupDragAndDrop() {
-        document.querySelectorAll('.game-card[draggable="true"], .label-item[draggable="true"]').forEach(el => {
-            el.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', e.target.id);
-            });
-        });
-
-        for(let i=0; i<3; i++) {
-            const slot = document.getElementById(`slot-${i}`);
-            slot.addEventListener('dragover', e => e.preventDefault());
-            slot.addEventListener('drop', e => {
-                e.preventDefault();
-                const id = e.dataTransfer.getData('text/plain');
-                const draggedEl = document.getElementById(id);
-                if(!draggedEl) return;
-                
-                const type = draggedEl.dataset.type;
-                const itemType = draggedEl.dataset.itemtype;
-
-                Array.from(slot.children).forEach(child => {
-                    if (child.dataset && child.dataset.itemtype === itemType) {
-                        document.getElementById(itemType === 'card' ? 'card-source' : 'label-source').appendChild(child);
-                    }
-                });
-
-                slot.appendChild(draggedEl);
-                if(itemType === 'label') { draggedEl.classList.add('slot-label-display'); }
-                
-                updatePlacementData();
-            });
-        }
-        
-        document.getElementById('source-area').addEventListener('dragover', e => e.preventDefault());
-        document.getElementById('source-area').addEventListener('drop', e => {
-            e.preventDefault();
-            const id = e.dataTransfer.getData('text/plain');
-            const draggedEl = document.getElementById(id);
-            if(!draggedEl) return;
-            draggedEl.classList.remove('slot-label-display');
-            document.getElementById(draggedEl.dataset.itemtype === 'card' ? 'card-source' : 'label-source').appendChild(draggedEl);
-            updatePlacementData();
-        });
-    }
-
-    function updatePlacementData() {
-        for(let i=0; i<3; i++) {
-            const slot = document.getElementById(`slot-${i}`);
-            const cardEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'card');
-            const labelEl = Array.from(slot.children).find(c => c.dataset && c.dataset.itemtype === 'label');
-            placedCards[i] = cardEl ? cardEl.dataset.type : null;
-            placedLabels[i] = labelEl ? labelEl.dataset.type : null;
-        }
-    }
-
     function resetBoard() {
         placedCards = [null, null, null]; placedLabels = [null, null, null]; selectedChoiceIndex = -1;
         document.querySelectorAll('.placement-slot').forEach(s => { s.innerHTML = ''; s.classList.remove('selected'); });
@@ -577,11 +589,9 @@
                 <div class="label-item type-stone" draggable="true" id="l-stone" data-type="stone" data-itemtype="label">死</div>
                 <div class="label-item type-seed" draggable="true" id="l-seed" data-type="seed" data-itemtype="label">種</div>`;
         }
-        setupDragAndDrop();
         document.getElementById('confirm-btn').style.display = 'block';
     }
 
-    // --- 視覚的・身体的反応エフェクト ---
     let myDeadPrev = 0; let myLovePrev = 0;
     let oppDeadPrev = 0; let oppLovePrev = 0;
 
@@ -635,15 +645,23 @@
             addLove = 0;
         }
 
+        // --- 🌟【スマホ横画面対応】コンテナのサイズに合わせて花の発生範囲を自動調整 ---
+        const rect = container.getBoundingClientRect();
+        const cw = rect.width || 240; 
+        const ch = rect.height || 240;
+        const cx = cw / 2;
+        const cy = ch / 2;
+        const maxRadius = Math.min(cx, cy) - 15;
+
         const addIcon = (type, char, count) => {
             for(let i=0; i<count; i++) {
                 const el = document.createElement('div');
                 el.className = `flower-icon ${type}`;
                 el.innerText = char;
                 const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 90 + 10;
-                const x = 120 + Math.cos(angle) * radius - 8;
-                const y = 120 + Math.sin(angle) * radius - 8;
+                const radius = Math.random() * maxRadius;
+                const x = cx + Math.cos(angle) * radius - 8;
+                const y = cy + Math.sin(angle) * radius - 8;
                 el.style.left = `${x}px`; el.style.top = `${y}px`;
                 container.appendChild(el);
             }
@@ -652,7 +670,6 @@
         addIcon('dead', '💀', addDead);
     }
 
-    // --- その他UIコントロール ---
     function lockBoard(msg) { document.getElementById('board-lock').style.display = 'flex'; document.getElementById('board-lock').innerText = msg; document.getElementById('confirm-btn').disabled = true; }
     function unlockBoard() { document.getElementById('board-lock').style.display = 'none'; document.getElementById('confirm-btn').disabled = false; }
 
@@ -672,6 +689,7 @@
             }
         }, 1000);
     }
+    
     function updateTimerUI() {
         const m = String(Math.floor(secondsLeft/60)).padStart(2,'0'); const s = String(secondsLeft%60).padStart(2,'0');
         document.getElementById('timer-display').innerText = `${m}:${s}`;
@@ -683,7 +701,7 @@
 
 
     // ==========================================
-    // 🤖【完全追加】思考AI対戦練習モード・数理シミュレータ
+    // 🤖 思考AI対戦練習モード・数理シミュレータ
     // ==========================================
     function startAIModeTrigger() {
         isAIMode = true;
@@ -696,7 +714,7 @@
         document.getElementById('my-name').innerHTML = `${myUsername || "YOU"} <span style="color:#aaa; font-size:10px;">[AI練習戦]</span>`;
         document.getElementById('opp-name').innerHTML = `思考AI <span style="color:#aaa; font-size:10px;">[LEVEL 1]</span>`;
         
-        writeLog("【システム】思考AI対戦（練習モード）を開始しました。目標1000%…ではなく100輪窒息または毒殺！");
+        writeLog("【システム】思考AI対戦（練習モード）を開始しました。");
         
         document.getElementById('turn-display').innerText = `1 / 10`;
         resetBoard();
@@ -708,25 +726,19 @@
         document.getElementById('source-area').style.display = 'block';
         document.getElementById('choice-btn-row').style.display = 'none';
         document.getElementById('rotation-wrapper').classList.remove('rotate-to-choice');
-        setupDragAndDrop();
     }
 
-    // AI練習モード用のアクション確定処理
     function submitActionLocal() {
         clearInterval(timerInterval);
         
         if (currentPhaseRole === 'florist') {
-            // あなたが配置したターン
             if (placedCards.includes(null) || placedLabels.includes(null)) {
                 alert("3つの枠すべてにカードとラベルを配置してください！");
                 startTimer(secondsLeft); return;
             }
             lockBoard("AIがカードを思考・選択中...");
-            
-            // 2秒後にAIがチョイスを実行
             setTimeout(() => { executeAIChoiceLogic(); }, 1500);
         } else {
-            // あなたが選択したターン
             if (selectedChoiceIndex === -1) {
                 alert("カードを1枚選んでください！");
                 startTimer(secondsLeft); return;
@@ -736,11 +748,10 @@
         }
     }
 
-    // AI側のチョイス（ランダムな3択）
     function executeAIChoiceLogic() {
         let aiChoiceIdx = Math.floor(Math.random() * 3);
         let selectedCard = placedCards[aiChoiceIdx];
-        let targetPlayerState = localAIState.p2; // AIの部屋へ
+        let targetPlayerState = localAIState.p2; 
 
         let logMsg = ``;
         if (selectedCard === 'sun') {
@@ -755,7 +766,7 @@
             if (targetPlayerState.love > targetPlayerState.dead) {
                 targetPlayerState.love += 15;
                 logMsg = `🌱思考AI の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
-            } else if (targetPlayerState.love < targetPlayerState.dead) {
+            } else {
                 targetPlayerState.dead += 15;
                 logMsg = `☠️思考AI の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
             }
@@ -771,7 +782,6 @@
 
         updateRooms(localAIState);
 
-        // フェーズ2（AIが配置、あなたが選択）へ移行
         setTimeout(() => {
             localAIState.phase = 2;
             localAIState.florist = 2;
@@ -782,17 +792,14 @@
             document.getElementById('confirm-btn').style.display = 'none';
             lockBoard("AIが裏で花とラベルを偽装中...");
 
-            // 1.5秒後にAIの配置をオープン
             setTimeout(() => { executeAIFloristPlacementLogic(); }, 1500);
         }, 2000);
     }
 
-    // AI側のフローリスト配置（カードとラベルをシャッフル）
     function executeAIFloristPlacementLogic() {
         let cards = ['sun', 'stone', 'seed'];
         let labels = ['sun', 'stone', 'seed'];
         
-        // 完全シャッフル（ブラフ生成）
         cards.sort(() => Math.random() - 0.5);
         labels.sort(() => Math.random() - 0.5);
         
@@ -812,11 +819,10 @@
         startTimer(300);
     }
 
-    // あなたがAIのカードを選択した後のローカル計算
     function executePlayerChoiceLocalLogic() {
         let idx = selectedChoiceIndex;
         let selectedCard = localAIState.currentPlacement.cards[idx];
-        let targetPlayerState = localAIState.p1; // あなたの部屋へ
+        let targetPlayerState = localAIState.p1; 
 
         let logMsg = ``;
         if (selectedCard === 'sun') {
@@ -831,7 +837,7 @@
             if (targetPlayerState.love > targetPlayerState.dead) {
                 targetPlayerState.love += 15;
                 logMsg = `🌱あなた の部屋は愛に満ちていた。種は [15輪の愛の花] として咲き誇った！`;
-            } else if (targetPlayerState.love < targetPlayerState.dead) {
+            } else {
                 targetPlayerState.dead += 15;
                 logMsg = `☠️あなた の部屋は毒に侵されていた。種は [15輪の死の花] として狂い咲いた...！`;
             }
@@ -847,7 +853,6 @@
 
         updateRooms(localAIState);
 
-        // 1ターン完了処理（スリップダメージ・生死の数理判定）
         setTimeout(() => {
             let d1 = localAIState.p1.dead;
             let d2 = localAIState.p2.dead;
@@ -855,12 +860,11 @@
             if(d2 > 0) localAIState.p2.life -= Math.pow(1.2, d2);
 
             let p1DeathCause = null; let p2DeathCause = null;
-            if (localAIState.p1.love >= 100) p1DeathCause = "窒息中毒死"; else if (localAIState.p1.life <= 0) p1DeathCause = "猛毒ショ死";
-            if (localAIState.p2.love >= 100) p2DeathCause = "窒息中毒死"; else if (localAIState.p2.life <= 0) p2DeathCause = "猛毒ショ死";
+            if (localAIState.p1.love >= 100) p1DeathCause = "窒息中毒死"; else if (localAIState.p1.life <= 0) p1DeathCause = "猛毒ショック死";
+            if (localAIState.p2.love >= 100) p2DeathCause = "窒息中毒死"; else if (localAIState.p2.life <= 0) p2DeathCause = "猛毒ショック死";
 
             let turnLog = `【第 ${localAIState.turn} ターン終了】\n`;
-            if(d1 > 0) turnLog += `・あなた は毒に蝕まれている。(残命: ${Math.max(0, localAIState.p1.life).toFixed(1)}%)\n`;
-            if(d2 > 0) turnLog += `・思考AI は毒に蝕まれている。(残命: ${Math.max(0, localAIState.p2.life).toFixed(1)}%)\n`;
+            
             writeLog(turnLog);
 
             updateRooms(localAIState);
@@ -883,15 +887,14 @@
             if (isGameOver) {
                 lockBoard("決着！");
                 
-                // 🌟 勝利エフェクト発動
+                // エフェクト発動
                 showVictoryEffect(localWinner, p1DeathCause || p2DeathCause || 'goal');
 
                 setTimeout(() => {
                     alert(`【AI戦 最終リザルト】\n勝者: ${localWinner}\nあなたの愛の花: ${localAIState.p1.love}輪 / 毒残骸: ${localAIState.p1.dead}輪\nAIの愛の花: ${localAIState.p2.love}輪 / 毒残骸: ${localAIState.p2.dead}輪`);
                     location.href = '/';
-                }, 5000); // 5秒後にアラートと画面遷移
+                }, 5000); 
             } else {
-                // 次のターンへ
                 localAIState.turn++;
                 localAIState.phase = 1;
                 localAIState.florist = 1;
@@ -911,7 +914,6 @@
             }
         }, 2000);
     }
-
 </script>
 </body>
 </html>
